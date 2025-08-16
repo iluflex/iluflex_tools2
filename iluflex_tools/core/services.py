@@ -1,5 +1,6 @@
 import socket
 import threading
+import atexit
 from datetime import datetime
 from typing import Callable, List, Dict, Any
 import time
@@ -25,6 +26,10 @@ class ConnectionService:
         self._stop = threading.Event()
         self._remote = ("", 0)
         self._listeners: List[Callable[[Dict[str, Any]], None]] = []
+
+        # garante que a conexão seja encerrada na finalização do intérprete
+        self._atexit_handler = self.disconnect
+        atexit.register(self._atexit_handler)
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
@@ -69,7 +74,17 @@ class ConnectionService:
             self.connected = False
             return False
 
+    def unregister_shutdown(self):
+        if getattr(self, "_atexit_handler", None):
+            try:
+                atexit.unregister(self._atexit_handler)
+            except Exception:
+                pass
+            self._atexit_handler = None
+
     def disconnect(self):
+        # evita que atexit chame novamente após desconectar
+        self.unregister_shutdown()
         if self._sock:
             try:
                 print("[DISCONNECT] encerrando conexão ...")

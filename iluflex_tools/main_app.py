@@ -33,6 +33,7 @@ class MainApp(ctk.CTk):
             port=self.settings.last_port
         )
         self.conn = ConnectionService()
+        self.conn.add_listener(self._on_conn_event)
         self.ota = OtaService()
         self.ir = IrService()
         self.net = NetworkService()
@@ -111,6 +112,22 @@ class MainApp(ctk.CTk):
 
     def _toggle_sidebar_collapse(self):
         self.sidebar.set_collapsed(not self.sidebar.collapsed)
+
+    def _on_conn_event(self, ev: dict):
+        t = ev.get("type")
+        if t == "disconnect":
+            self.app_state.connected = False
+            self.header.set_connected(False)
+            page = self.pages.get("conexao")
+            if page and hasattr(page, "status"):
+                try:
+                    page.status.configure(text="Desconectado.")
+                except Exception:
+                    pass
+        elif t == "connect":
+            self.app_state.connected = True
+            self.header.set_connected(True)
+
 
     def _do_connect(self, ip: str, port: int) -> bool:
         ok = self.conn.connect(ip, port)

@@ -10,7 +10,7 @@
 ## Rodar (sem mexer no PATH/ESP-IDF)
 Abra um PowerShell nesta pasta e rode UM dos comandos abaixo (escolha o seu `python.exe`):
 
-# 2) sem venv, apontando direto para o seu python.exe
+1) sem venv, apontando direto para o seu python.exe
 C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe -m pip install -r requirements.txt --user
 C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe main.py
 ```

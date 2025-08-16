@@ -2,6 +2,7 @@ import threading
 import customtkinter as ctk
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService
+from iluflex_tools.widgets.status_led import StatusLed
 
 class ConexaoPage(ctk.CTkFrame):
     def __init__(
@@ -23,11 +24,6 @@ class ConexaoPage(ctk.CTkFrame):
         self._scan_thread = None
         self._conn = conn
         self._build()
-        try:
-            if self._conn is not None:
-                self._conn.add_listener(self._on_conn_event)
-        except Exception:
-            pass
 
     def _build(self):
         self.grid_columnconfigure(1, weight=1)
@@ -84,8 +80,12 @@ class ConexaoPage(ctk.CTkFrame):
         ctk.CTkButton(btns, text="Conectar", command=self._connect).pack(side="left", padx=6)
         ctk.CTkButton(btns, text="Desconectar", command=self._disconnect).pack(side="left", padx=6)
 
-        self.status = ctk.CTkLabel(self, text="Pronto.")
-        self.status.grid(row=5, column=0, columnspan=3, pady=6)
+        status_frame = ctk.CTkFrame(self)
+        status_frame.grid(row=5, column=0, columnspan=3, pady=6)
+        self.status_led = StatusLed(status_frame, conn=self._conn)
+        self.status_led.pack(side="left", padx=(0,6))
+        self.status = ctk.CTkLabel(status_frame, text="Pronto.")
+        self.status.pack(side="left")
 
     # ---- Ações ----
     def _on_row_double_click(self, _event=None):
@@ -201,18 +201,5 @@ class ConexaoPage(ctk.CTkFrame):
             cur.append(row)
             self.table.set_rows(cur)
 
-    # ---- Eventos de conexão ----
-    def _on_conn_event(self, ev: dict):
-        try:
-            if ev.get("type") == "disconnect":
-                self.after(0, lambda: self.status.configure(text="Desconectado."))
-        except Exception:
-            pass
-
     def destroy(self):
-        try:
-            if self._conn is not None:
-                self._conn.remove_listener(self._on_conn_event)
-        except Exception:
-            pass
         return super().destroy()

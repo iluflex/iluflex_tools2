@@ -28,18 +28,23 @@ class ConnectionService:
         self._auto_thread: threading.Thread | None = None
         self._auto_stop = threading.Event()
         self._auto_interval = 5.0
+        self._listener_lock = threading.Lock()
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb not in self._listeners:
-            self._listeners.append(cb)
+        with self._listener_lock:
+            if cb not in self._listeners:
+                self._listeners.append(cb)
 
     def remove_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb in self._listeners:
-            self._listeners.remove(cb)
+        with self._listener_lock:
+            if cb in self._listeners:
+                self._listeners.remove(cb)
 
     def _emit(self, ev: Dict[str, Any]):
-        for cb in list(self._listeners):
+        with self._listener_lock:
+            listeners = list(self._listeners)
+        for cb in listeners:
             try:
                 cb(ev)
             except Exception:
@@ -152,10 +157,18 @@ class ConnectionService:
             self._sock.sendall(payload)
             self._emit({"type": "tx", "ts": ts, "remote": self._remote, "text": dbg, "raw": payload})
             return True
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"[TX] erro: {e}")
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            # garantir que listeners recebam o evento de disconnect
+            self.disconnect()
+            return False
         except Exception as e:
             print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            self.disconnect()
             return False
 
 # --------- OTA Services ---------

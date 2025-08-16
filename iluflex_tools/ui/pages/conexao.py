@@ -38,6 +38,12 @@ class ConexaoPage(ctk.CTkFrame):
         self.table = ColumnToggleTree(self, columns=cols, height=10)
         self.table.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=6, pady=(6, 10))
 
+        # Oculta colunas desnecessárias por padrão
+        for col in ("MASCARA", "GATEWAY"):
+            try:
+                self.table._toggle_col(col)
+            except Exception:
+                pass
 
         # duplo clique: conecta no IP da linha
         self.table.tree.bind("<Double-1>", self._on_row_double_click)

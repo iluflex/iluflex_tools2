@@ -76,7 +76,12 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.table.set_font_size(12)
 
-
+        # Oculta colunas de detalhes
+        for col in ("FW", "HW", "Conectado a", "Sinal (dB)"):
+            try:
+                self.table._toggle_col(col)
+            except Exception:
+                pass
 
         # Ordenação por Slave ID
         try:

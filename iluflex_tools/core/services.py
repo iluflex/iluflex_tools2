@@ -25,18 +25,23 @@ class ConnectionService:
         self._stop = threading.Event()
         self._remote = ("", 0)
         self._listeners: List[Callable[[Dict[str, Any]], None]] = []
+        self._listener_lock = threading.Lock()
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb not in self._listeners:
-            self._listeners.append(cb)
+        with self._listener_lock:
+            if cb not in self._listeners:
+                self._listeners.append(cb)
 
     def remove_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb in self._listeners:
-            self._listeners.remove(cb)
+        with self._listener_lock:
+            if cb in self._listeners:
+                self._listeners.remove(cb)
 
     def _emit(self, ev: Dict[str, Any]):
-        for cb in list(self._listeners):
+        with self._listener_lock:
+            listeners = list(self._listeners)
+        for cb in listeners:
             try:
                 cb(ev)
             except Exception:

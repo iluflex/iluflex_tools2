@@ -74,18 +74,9 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.table.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
+        self.table.set_font_size(12)
 
-        # Fonte maior (tenta no wrapper e no Treeview interno)
-        try:
-            big = ctk.CTkFont(size=self.FONT_SIZE_TABLE)
-            try:
-                self.table.configure(font=big)  # se o wrapper aceitar
-            except Exception:
-                tv = getattr(self.table, "tree", getattr(self.table, "tv", None))
-                if tv is not None:
-                    tv.configure(font=big)
-        except Exception:
-            pass
+
 
         # Ordenação por Slave ID
         try:

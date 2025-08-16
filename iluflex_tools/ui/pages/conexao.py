@@ -38,6 +38,7 @@ class ConexaoPage(ctk.CTkFrame):
         self.table = ColumnToggleTree(self, columns=cols, height=10)
         self.table.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=6, pady=(6, 10))
 
+
         # duplo clique: conecta no IP da linha
         self.table.tree.bind("<Double-1>", self._on_row_double_click)
         # sorting default by NAME
@@ -104,6 +105,7 @@ class ConexaoPage(ctk.CTkFrame):
                 "DHCP": item.get("DHCP", "")
             })
         self.table.set_rows(rows)
+        self.table.set_font_size(12)
         self.btn_buscar.configure(state="normal", text="Buscar master na rede")
         self.status.configure(text=f"{len(rows)} dispositivo(s) encontrados (timeout={timeout}ms)")
 

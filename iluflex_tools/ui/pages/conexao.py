@@ -21,18 +21,26 @@ class ConexaoPage(ctk.CTkFrame):
             row=0, column=0, columnspan=3, pady=(10, 12), sticky="w"
         )
 
-        ctk.CTkLabel(self, text="IP MASTER").grid(row=1, column=0, sticky="e", padx=6, pady=6)
-        self.ip_entry = ctk.CTkEntry(self)
+        conn_frame = ctk.CTkFrame(self)
+        conn_frame.grid(row=1, column=0, columnspan=3, padx = 6, pady=10, sticky="ew")
+
+        # colunas do conn_frame: 0,1 (IP), 3,4 (Porta), 5 (spacer), 6 (botão)
+        conn_frame.grid_columnconfigure(1, weight=1)   # entry IP expande
+        conn_frame.grid_columnconfigure(3, weight=1)   # entry Porta expande
+        conn_frame.grid_columnconfigure(5, weight=1)   # spacer que empurra o botão
+  
+        ctk.CTkLabel(conn_frame, text="IP Master:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        self.ip_entry = ctk.CTkEntry(conn_frame)
         self.ip_entry.insert(0, self.get_state().ip)
-        self.ip_entry.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        self.ip_entry.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
 
-        ctk.CTkLabel(self, text="Porta").grid(row=2, column=0, sticky="e", padx=6, pady=6)
-        self.port_entry = ctk.CTkEntry(self)
+        ctk.CTkLabel(conn_frame, text="Porta:").grid(row=0, column=3, sticky="e", padx=6, pady=6)
+        self.port_entry = ctk.CTkEntry(conn_frame)
         self.port_entry.insert(0, str(self.get_state().port))
-        self.port_entry.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        self.port_entry.grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
-        self.btn_buscar = ctk.CTkButton(self, text="Buscar master na rede", command=self._buscar)
-        self.btn_buscar.grid(row=1, column=2, rowspan=2, padx=6, pady=6)
+        self.btn_buscar = ctk.CTkButton(conn_frame, text="Buscar master na rede", command=self._buscar)
+        self.btn_buscar.grid(row=0, column=6, padx=6, pady=6, sticky="e")
 
         cols = [("NAME", 220), ("MAC", 160), ("IP", 140), ("MASCARA", 140), ("GATEWAY", 140), ("DHCP", 100)]
         self.table = ColumnToggleTree(self, columns=cols, height=10)

@@ -8,7 +8,10 @@ SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
 @dataclass
 class Settings:
     theme: str = "system"            # "system" | "dark" | "light"
-    discovery_timeout_ms: int = 2000 # tempo padrão para "procurar não cadastrados"
+    discovery_timeout_ms: int = 2000 # tempo padrão para "procurar não dispositivos não cadastrados"
+    last_ip: str = "192.168.1.70"
+    last_port: int = 4999
+
 
 def load_settings() -> Settings:
     try:

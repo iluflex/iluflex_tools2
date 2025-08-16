@@ -27,8 +27,11 @@ class MainApp(ctk.CTk):
         self.geometry("900x700")
         self.minsize(800, 500)
 
-        self.app_state = AppState()
         self.settings = load_settings()
+        self.app_state = AppState(
+            ip=self.settings.last_ip,
+            port=self.settings.last_port
+        )
         self.conn = ConnectionService()
         self.ota = OtaService()
         self.ir = IrService()
@@ -114,6 +117,10 @@ class MainApp(ctk.CTk):
         self.app_state.connected = ok
         self.app_state.ip, self.app_state.port = ip, port
         self.header.set_connected(ok)
+        self.settings.last_ip = ip
+        self.settings.last_port = port
+        save_settings(self.settings)
+
         return ok
 
     def _do_disconnect(self):

@@ -110,34 +110,25 @@ class ConexaoPage(ctk.CTkFrame):
         if self._scan_thread and self._scan_thread.is_alive():
             return
         timeout = int(self.get_discovery_timeout())
+        self.table.set_rows([])
+        self.table.set_font_size(12)
         self.btn_buscar.configure(state="disabled", text="Aguarde…")
         self.status.configure(text=f"Procurando (timeout={timeout}ms)…")
 
         def worker():
-            try:
-                data = self.scan_func(timeout)
-            except Exception:
-                data = []
-            self.after(0, lambda d=data, t=timeout: self._on_scan_done(d, t))
+            items = self.scan_func(
+                timeout_ms=timeout,
+                on_found=lambda d: self.after(0, self._append_row, d)
+            )
+            self.after(0, self._on_scan_finished, items, timeout)
 
         self._scan_thread = threading.Thread(target=worker, daemon=True)
         self._scan_thread.start()
 
-    def _on_scan_done(self, data, timeout):
-        rows = []
-        for item in data:
-            rows.append({
-                "NAME": item.get("NAME", ""),
-                "MAC": item.get("MAC", ""),
-                "IP": item.get("IP", ""),
-                "MASCARA": item.get("MASCARA", ""),
-                "GATEWAY": item.get("GATEWAY", ""),
-                "DHCP": item.get("DHCP", "")
-            })
-        self.table.set_rows(rows)
-        self.table.set_font_size(12)
+    def _on_scan_finished(self, items, timeout):
+        self._scan_thread = None
         self.btn_buscar.configure(state="normal", text="Buscar master na rede")
-        self.status.configure(text=f"{len(rows)} dispositivo(s) encontrados (timeout={timeout}ms)")
+        self.status.configure(text=f"{len(items)} Interfaces encontradas (timeout={timeout}ms)")
 
     # ---- Tema ----
     def on_theme_changed(self):

@@ -128,6 +128,7 @@ class ConnectionService:
             print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            self.disconnect()
             return False
 
 # --------- OTA Services ---------

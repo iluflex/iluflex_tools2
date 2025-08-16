@@ -58,6 +58,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         ).pack(side="left", padx=(4, 12))
 
         ctk.CTkButton(bar, text="ATUALIZAR LISTA", command=self._on_click_atualizar).pack(side="left", padx=6)
+        self.auto_reconnect = ctk.CTkSwitch(bar, text="Auto reconectar", command=self._toggle_auto_reconnect)
+        self.auto_reconnect.pack(side="left", padx=6)
 
         # Tabela
         cols = [
@@ -91,6 +93,15 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self.table.enable_header_sort()
             except Exception:
                 pass
+
+    def _toggle_auto_reconnect(self):
+        try:
+            if self.auto_reconnect.get():
+                self._conn.auto_reconnect()
+            else:
+                self._conn.stop_auto_reconnect()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Ingestão de RRF,10

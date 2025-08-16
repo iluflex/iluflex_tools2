@@ -83,6 +83,8 @@ class ComandosIRPage(ctk.CTkFrame):
         sendcmd_frame = ctk.CTkFrame(self)
         sendcmd_frame.grid(row=8, column=0, sticky="ew", padx=10, pady=(8,10))
         sendcmd_frame.grid_columnconfigure(5, weight=1)
+        self.auto_reconnect = ctk.CTkSwitch(sendcmd_frame, text="Auto reconectar", command=self._toggle_auto_reconnect)
+        self.auto_reconnect.pack(side="left", padx=(0, 8))
         self.entry = ctk.CTkEntry(sendcmd_frame, placeholder_text="Digite o comando a enviar...", width=600)
         self.entry.pack(side="left", padx=(0, 8))
         ctk.CTkButton(sendcmd_frame, text="Enviar", command=self._send).pack(side="left", padx=(0, 8))
@@ -138,6 +140,15 @@ class ComandosIRPage(ctk.CTkFrame):
         print(f">> {repr(msg)}")  # log TX simples
         if not ok:
             self._append("[warn] não conectado; mensagem não enviada.\n")
+
+    def _toggle_auto_reconnect(self):
+        try:
+            if self.auto_reconnect.get():
+                self.conn.auto_reconnect()
+            else:
+                self.conn.stop_auto_reconnect()
+        except Exception:
+            pass
 
     def _clear(self):
         self.status.configure(text="")

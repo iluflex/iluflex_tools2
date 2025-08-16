@@ -75,6 +75,8 @@ class ConexaoPage(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(self)
         btns.grid(row=4, column=0, columnspan=3, pady=8)
+        self.auto_reconnect = ctk.CTkSwitch(btns, text="Auto reconectar")
+        self.auto_reconnect.pack(side="left", padx=6)
         ctk.CTkButton(btns, text="Conectar", command=self._connect).pack(side="left", padx=6)
         ctk.CTkButton(btns, text="Desconectar", command=self._disconnect).pack(side="left", padx=6)
 
@@ -100,10 +102,21 @@ class ConexaoPage(ctk.CTkFrame):
         ip = self.ip_entry.get().strip()
         port = int(self.port_entry.get().strip() or 0)
         ok = self.on_connect(ip, port)
+        try:
+            if self.auto_reconnect.get():
+                self._conn.auto_reconnect()
+            else:
+                self._conn.stop_auto_reconnect()
+        except Exception:
+            pass
         self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
 
     def _disconnect(self):
         self.on_disconnect()
+        try:
+            self._conn.stop_auto_reconnect()
+        except Exception:
+            pass
         self.status.configure(text="Desconectado.")
 
     def _buscar(self):

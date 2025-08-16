@@ -124,10 +124,18 @@ class ConnectionService:
             self._sock.sendall(payload)
             self._emit({"type": "tx", "ts": ts, "remote": self._remote, "text": dbg, "raw": payload})
             return True
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"[TX] erro: {e}")
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            # garantir que listeners recebam o evento de disconnect
+            self.disconnect()
+            return False
         except Exception as e:
             print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            self.disconnect()
             return False
 
 # --------- OTA Services ---------

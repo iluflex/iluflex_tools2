@@ -1,9 +1,19 @@
 import threading
 import customtkinter as ctk
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
+from iluflex_tools.core.services import ConnectionService
 
 class ConexaoPage(ctk.CTkFrame):
-    def __init__(self, master, on_connect, on_disconnect, get_state, scan_func=None, get_discovery_timeout=None):
+    def __init__(
+        self,
+        master,
+        on_connect,
+        on_disconnect,
+        get_state,
+        scan_func=None,
+        get_discovery_timeout=None,
+        conn: ConnectionService | None = None,
+    ):
         super().__init__(master)
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -11,7 +21,13 @@ class ConexaoPage(ctk.CTkFrame):
         self.scan_func = scan_func or (lambda timeout_ms: [])
         self.get_discovery_timeout = get_discovery_timeout or (lambda: 2000)
         self._scan_thread = None
+        self._conn = conn
         self._build()
+        try:
+            if self._conn is not None:
+                self._conn.add_listener(self._on_conn_event)
+        except Exception:
+            pass
 
     def _build(self):
         self.grid_columnconfigure(1, weight=1)
@@ -171,3 +187,19 @@ class ConexaoPage(ctk.CTkFrame):
             cur = getattr(self, "_rows", [])
             cur.append(row)
             self.table.set_rows(cur)
+
+    # ---- Eventos de conexão ----
+    def _on_conn_event(self, ev: dict):
+        try:
+            if ev.get("type") == "disconnect":
+                self.after(0, lambda: self.status.configure(text="Desconectado."))
+        except Exception:
+            pass
+
+    def destroy(self):
+        try:
+            if self._conn is not None:
+                self._conn.remove_listener(self._on_conn_event)
+        except Exception:
+            pass
+        return super().destroy()

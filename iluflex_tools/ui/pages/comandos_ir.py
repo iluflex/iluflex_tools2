@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
+from iluflex_tools.widgets.status_led import StatusLed
 
 class ComandosIRPage(ctk.CTkFrame):
     """
@@ -82,13 +83,18 @@ class ComandosIRPage(ctk.CTkFrame):
         sendcmd_frame = ctk.CTkFrame(self)
         sendcmd_frame.grid(row=8, column=0, sticky="ew", padx=10, pady=(8,10))
         sendcmd_frame.grid_columnconfigure(5, weight=1)
+        self.auto_reconnect = ctk.CTkSwitch(sendcmd_frame, text="Auto reconectar", command=self._toggle_auto_reconnect)
+        self.auto_reconnect.pack(side="left", padx=(0, 8))
         self.entry = ctk.CTkEntry(sendcmd_frame, placeholder_text="Digite o comando a enviar...", width=600)
         self.entry.pack(side="left", padx=(0, 8))
         ctk.CTkButton(sendcmd_frame, text="Enviar", command=self._send).pack(side="left", padx=(0, 8))
 
-        # status message
-        self.status = ctk.CTkLabel(self, text="")
-        self.status.grid(row=9, column=0, sticky="w", padx=10, pady=(0,10))
+        status_frame = ctk.CTkFrame(self)
+        status_frame.grid(row=9, column=0, sticky="w", padx=10, pady=(0,10))
+        self.status_led = StatusLed(status_frame, conn=self.conn)
+        self.status_led.pack(side="left", padx=(0,6))
+        self.status = ctk.CTkLabel(status_frame, text="")
+        self.status.pack(side="left")
 
 
 
@@ -135,8 +141,17 @@ class ComandosIRPage(ctk.CTkFrame):
         if not ok:
             self._append("[warn] não conectado; mensagem não enviada.\n")
 
+    def _toggle_auto_reconnect(self):
+        try:
+            if self.auto_reconnect.get():
+                self.conn.auto_reconnect()
+            else:
+                self.conn.stop_auto_reconnect()
+        except Exception:
+            pass
+
     def _clear(self):
-            self.status.configure(text="")
+        self.status.configure(text="")
 
     # ---- eventos da conexão ----
     def _on_conn_event(self, ev: dict):
@@ -147,10 +162,8 @@ class ComandosIRPage(ctk.CTkFrame):
         t = ev.get("ts", "--:--:--.---")
         typ = ev.get("type")
         if typ == "connect":
-            self.status.configure(text=f"Conectado a {ev.get('remote')}")
             self._append(f"[{t}] CONNECT {ev.get('remote')}\n")
         elif typ == "disconnect":
-            self.status.configure(text="Desconectado.")
             self._append(f"[{t}] DISCONNECT\n")
         elif typ == "tx":
             self._append(f"[{t}] TX: {ev.get('text','')}")  # já vem com \n se você mandar

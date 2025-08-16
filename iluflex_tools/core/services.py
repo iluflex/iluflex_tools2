@@ -25,18 +25,26 @@ class ConnectionService:
         self._stop = threading.Event()
         self._remote = ("", 0)
         self._listeners: List[Callable[[Dict[str, Any]], None]] = []
+        self._auto_thread: threading.Thread | None = None
+        self._auto_stop = threading.Event()
+        self._auto_interval = 5.0
+        self._listener_lock = threading.Lock()
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb not in self._listeners:
-            self._listeners.append(cb)
+        with self._listener_lock:
+            if cb not in self._listeners:
+                self._listeners.append(cb)
 
     def remove_listener(self, cb: Callable[[Dict[str, Any]], None]):
-        if cb in self._listeners:
-            self._listeners.remove(cb)
+        with self._listener_lock:
+            if cb in self._listeners:
+                self._listeners.remove(cb)
 
     def _emit(self, ev: Dict[str, Any]):
-        for cb in list(self._listeners):
+        with self._listener_lock:
+            listeners = list(self._listeners)
+        for cb in listeners:
             try:
                 cb(ev)
             except Exception:
@@ -45,6 +53,7 @@ class ConnectionService:
     # ---- conexão ----
     def connect(self, ip: str, port: int, timeout: float = 3.0) -> bool:
         self.disconnect()  # encerra conexão anterior, se houver
+        self._remote = (ip, port)
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(timeout)
@@ -52,7 +61,6 @@ class ConnectionService:
             s.connect((ip, port))
             s.settimeout(0.5)
             self._sock = s
-            self._remote = (ip, port)
             self.connected = True
             self._stop.clear()
             self._rx_thread = threading.Thread(target=self._recv_loop, daemon=True)
@@ -68,6 +76,31 @@ class ConnectionService:
             self._sock = None
             self.connected = False
             return False
+
+    def auto_reconnect(self, interval: float = 5.0):
+        """Tenta reconectar periodicamente após desconexão."""
+        self._auto_interval = max(0.1, interval)
+        # encerra thread anterior, se houver
+        self._auto_stop.set()
+        if self._auto_thread and self._auto_thread.is_alive():
+            try:
+                self._auto_thread.join(timeout=0)
+            except Exception:
+                pass
+        self._auto_stop.clear()
+        self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
+        self._auto_thread.start()
+
+    def stop_auto_reconnect(self):
+        self._auto_stop.set()
+
+    def _auto_loop(self):
+        while not self._auto_stop.wait(self._auto_interval):
+            if self.connected:
+                continue
+            ip, port = self._remote
+            if ip and port:
+                self.connect(ip, port)
 
     def disconnect(self):
         if self._sock:
@@ -124,6 +157,13 @@ class ConnectionService:
             self._sock.sendall(payload)
             self._emit({"type": "tx", "ts": ts, "remote": self._remote, "text": dbg, "raw": payload})
             return True
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"[TX] erro: {e}")
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
+            # garantir que listeners recebam o evento de disconnect
+            self.disconnect()
+            return False
         except Exception as e:
             print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]

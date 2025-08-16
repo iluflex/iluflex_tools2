@@ -15,3 +15,17 @@ C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe -m pip insta
 C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe main.py
 ```
 ## Comandos para gerar executável com Installer
+
+## Status LED
+
+Para exibir o estado da conexão em qualquer página, use o widget `StatusLed`.
+
+```python
+from iluflex_tools.widgets.status_led import StatusLed
+
+led = StatusLed(parent)
+led.bind_conn(conn)  # instância de ConnectionService
+```
+
+O LED fica verde quando conectado e vermelho ao desconectar.
+

@@ -4,6 +4,8 @@ from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService
 from iluflex_tools.widgets.status_led import StatusLed
 
+TABLE_FONT_SIZE = 12
+
 class ConexaoPage(ctk.CTkFrame):
     def __init__(
         self,
@@ -57,6 +59,7 @@ class ConexaoPage(ctk.CTkFrame):
         cols = [("NAME", 220), ("MAC", 160), ("IP", 140), ("MASCARA", 140), ("GATEWAY", 140), ("DHCP", 100)]
         self.table = ColumnToggleTree(self, columns=cols, height=10)
         self.table.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=6, pady=(6, 10))
+        self.table.set_font_size(TABLE_FONT_SIZE)
 
         # Oculta colunas desnecessárias por padrão
         for col in ("MASCARA", "GATEWAY"):
@@ -124,7 +127,7 @@ class ConexaoPage(ctk.CTkFrame):
             return
         timeout = int(self.get_discovery_timeout())
         self.table.set_rows([])
-        self.table.set_font_size(12)
+        self.table.set_font_size(TABLE_FONT_SIZE)
         self.btn_buscar.configure(state="disabled", text="Aguarde…")
         self.status.configure(text=f"Procurando (timeout={timeout}ms)…")
 
@@ -147,6 +150,7 @@ class ConexaoPage(ctk.CTkFrame):
     def on_theme_changed(self):
         if hasattr(self, "table"):
             self.table.apply_style()
+            self.table.set_font_size(TABLE_FONT_SIZE)
 
 
     def _get_selected_row(self):
@@ -186,6 +190,7 @@ class ConexaoPage(ctk.CTkFrame):
             # upsert by IP (stable in same scan); fallback to MAC
             key_cols = ["IP"] if "IP" in self.table._all_cols else ["MAC"]
             self.table.upsert_row(row, key_cols=key_cols)
+            self.table.set_font_size(TABLE_FONT_SIZE)
         except Exception:
             # fallback: rebuild all rows
             cur = getattr(self, "_rows", [])

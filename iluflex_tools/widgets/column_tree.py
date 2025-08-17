@@ -1,62 +1,105 @@
-# iluflex_tools_scaffold/iluflex_tools/widgets/column_tree.py
-# Versão revisada: centraliza controle de fonte e rowheight no próprio widget
+# iluflex_tools/widgets/column_tree.py
+# Mantém a API. Cores 100% centralizadas em _colors_for_mode() e passadas como dict.
 
+from __future__ import annotations
+import platform
 import tkinter as tk
 from tkinter import ttk
 from tkinter import font as tkfont
-import platform
 import customtkinter as ctk
 
+
+# =============================================================================
+# ÚNICA FONTE DE CORES DA TABELA (por tema)
+# =============================================================================
+_THEME_COLORS: dict[str, dict[str, str]] = {
+    "light": {
+        "bg": "#ffffff",
+        "fg": "#111111",
+        # Grid (borda, luz, sombra)
+        "grid_border": "#d0d0d0",
+        "grid_light": "#e6e6e6",
+        "grid_dark": "#c0c0c0",
+        # Cabeçalho (um pouco mais cinza que o corpo)
+        "header_bg": "#e5e5e5",
+        "header_hover_bg": "#d9d9d9",
+        # Hover de linha
+        "row_hover_bg": "#eef6ff",
+        # Zebra
+        "odd_bg": "#ffffff",
+        "even_bg": "#fafafa",
+        # Seleção
+        "sel_bg": "#3b82f6",
+        "sel_fg": "#ffffff",
+    },
+    "dark": {
+        "bg": "#1f1f1f",
+        "fg": "#eaeaea",
+        "grid_border": "#3a3a3a",
+        "grid_light": "#4a4a4a",
+        "grid_dark": "#252525",
+        "header_bg": "#2a2a2a",
+        "header_hover_bg": "#323232",
+        "row_hover_bg": "#2b3648",
+        "odd_bg": "#232323",
+        "even_bg": "#1b1b1b",
+        "sel_bg": "#3b82f6",
+        "sel_fg": "#ffffff",
+    },
+}
+
+
 class ColumnToggleTree(ctk.CTkFrame):
-    """
-    Treeview com menu no cabeçalho (clique direito) para exibir/ocultar colunas.
-    Acompanha o tema do CustomTkinter e reestiliza ao vivo via apply_style().
-    - Windows: usa 'vista' no modo light (tem separadores verticais de coluna)
-               e 'clam' no modo dark (permite cabeçalho escuro).
-    - Outras plataformas: 'clam' sempre.
+    """Treeview com menu de colunas e estilo responsivo ao tema persistido.
+    Mudança mínima: apenas cores em `_colors_for_mode()` e aplicação no `apply_style()`.
     """
 
-    # Tamanho padrão para novas instâncias (ajustável via set_default_font_size)
-    DEFAULT_FONT_SIZE = 9
+    DEFAULT_FONT_SIZE = 12
 
     def __init__(self, master, columns, height=12, font_size: int | None = None):
         super().__init__(master)
-        # normalize column specs: accept dicts ({'key','width'}), tuples (name,width) or plain strings
+        # ---- normaliza colunas ----
         norm_columns = []
         self._all_cols = []
         self._col_anchor = {}
+        self._col_widths = {}
+        self._visible = {}
+
         for c in columns:
             if isinstance(c, dict):
                 name = c.get("key") or c.get("name") or c.get("id")
                 width = int(c.get("width", 120))
                 anchor = str(c.get("anchor") or c.get("align") or "center").lower()
+                vis = bool(c.get("visible", True))
             elif isinstance(c, (tuple, list)) and len(c) >= 2:
                 name, width = c[0], int(c[1])
                 anchor = "center"
+                vis = True
             else:
                 name, width = str(c), 120
                 anchor = "center"
-            norm_columns.append((str(name), int(width), anchor))
-            self._all_cols.append(str(name))
-            self._col_anchor[str(name)] = anchor
+                vis = True
+            name = str(name)
+            norm_columns.append((name, width, anchor, vis))
+            self._all_cols.append(name)
+            self._col_anchor[name] = anchor
+            self._col_widths[name] = width
+            self._visible[name] = vis
 
-        # estilo e tema
+        # ---------- tema/estilo ----------
         self._style = ttk.Style(self)
         self._style_tv = "Ilfx.Treeview"
         self._style_hd = "Ilfx.Treeview.Heading"
-        self._current_theme = None  # 'vista' ou 'clam'
+        self._current_theme = None
 
         # fonte configurável por instância (ou global via DEFAULT_FONT_SIZE)
         self._font_size = int(font_size) if font_size is not None else int(self.DEFAULT_FONT_SIZE)
 
         # widget
-        self.tree = ttk.Treeview(
-            self, columns=self._all_cols, show="headings",
-            height=height, style=self._style_tv
-        )
-        for col, width, anchor in norm_columns:
+        self.tree = ttk.Treeview(self, columns=self._all_cols, show="headings", height=height, style=self._style_tv)
+        for col, width, anchor, _vis in norm_columns:
             # centraliza cabeçalho e células por padrão (ou usa anchor fornecido)
-            self.tree.heading(col, text=col, anchor=anchor)
+            self.tree.heading(col, text=col, anchor=anchor, command=lambda c=col: self._on_heading_click(c))
             self.tree.column(col, width=width, anchor=anchor, stretch=True)
 
         # Scrollbars CTk
@@ -71,17 +114,22 @@ class ColumnToggleTree(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        # menu de colunas
+        # menu de colunas (mantém padrão com checkmarks)
         self._menu = tk.Menu(self, tearoff=0)
-        for col, _w, _a in norm_columns:
-            self._menu.add_checkbutton(label=col, onvalue=True, offvalue=False,
+        self._col_vars = {}
+        for col, _w, _a, _vis in norm_columns:
+            var = tk.BooleanVar(value=self._visible[col])
+            self._col_vars[col] = var
+            self._menu.add_checkbutton(label=col, variable=var, onvalue=True, offvalue=False,
                                        command=lambda c=col: self._toggle_col(c))
 
-        # mapping de visibilidade
-        self._visible = {col: True for col, _w, _a in norm_columns}
-
-        # aplica estilo do tema atual (inclui fonte/rowheight)
+        # estilo inicial
         self.apply_style()
+
+        # aplicar visibilidade inicial (não mostrar todas ao abrir)
+        for col, _w, _a, vis in norm_columns:
+            if not vis:
+                self._apply_hide(col)
 
         # bind de clique direito para abrir menu
         self.tree.bind("<Button-3>", self._maybe_open_menu)
@@ -90,48 +138,38 @@ class ColumnToggleTree(ctk.CTkFrame):
         self._auto_sort_col = None
         self._auto_sort_asc = True
 
-    # ---------- API de fonte centralizada ----------
+    # ---------- API de fonte ----------
     @classmethod
     def set_default_font_size(cls, size: int) -> None:
         """Define o tamanho padrão usado por novas instâncias."""
-        try:
-            cls.DEFAULT_FONT_SIZE = int(size)
-        except Exception:
-            pass
+        cls.DEFAULT_FONT_SIZE = int(size)
 
     def set_font_size(self, size: int) -> None:
         """Atualiza o tamanho desta instância e re-aplica o estilo."""
-        try:
-            self._font_size = int(size)
-            self.apply_style()
-        except Exception:
-            pass
+        self._font_size = int(size)
+        self.apply_style()
 
-    # ---------- tema e cores ----------
+    # ---------- helpers de tema ----------
     def _pick_ttk_theme(self) -> str:
+        # Mantém lógica próxima ao original (vista no Windows claro; clam no demais/escuro)
         sys = platform.system().lower()
-        try:
-            mode = ctk.get_appearance_mode()  # "Light" / "Dark"
-        except Exception:
-            mode = "Light"
-        if sys == "windows":
-            return "vista" if mode == "Light" else "clam"
-        return "clam"
-
-    def _colors_for_mode(self):
         try:
             mode = ctk.get_appearance_mode()
         except Exception:
             mode = "Light"
-        if mode == "Dark":
-            BG = "#1f1f1f"; FG = "#eaeaea"; GRID = "#3a3a3a"; HD_BG = "#2a2a2a"
-            ODD = "#232323"; EVEN = "#1b1b1b"; SELBG = "#3b82f6"; SELF = "#ffffff"
-        else:
-            BG = "#ffffff"; FG = "#111111"; GRID = "#d9d9d9"; HD_BG = "#f3f3f3"
-            ODD = "#ffffff"; EVEN = "#fafafa"; SELBG = "#3b82f6"; SELF = "#ffffff"
-        return BG, FG, GRID, SELBG, SELF, HD_BG, ODD, EVEN
+        if sys == "windows":
+            return "clam" if str(mode) == "Dark" else "vista"
+        return "clam"
 
-    def apply_style(self):
+    def _colors_for_mode(self) -> dict[str, str]:
+        try:
+            mode = ctk.get_appearance_mode()
+        except Exception:
+            mode = "Light"
+        key = "dark" if str(mode).lower().startswith("dark") else "light"
+        return dict(_THEME_COLORS.get(key, _THEME_COLORS["light"]))
+
+    def apply_style(self):  # pode ser chamado no on_theme_changed
         desired = self._pick_ttk_theme()
         if desired != self._current_theme:
             try:
@@ -141,12 +179,12 @@ class ColumnToggleTree(ctk.CTkFrame):
                 self._style.theme_use("clam")
                 self._current_theme = "clam"
 
-        BG, FG, GRID, SELBG, SELF, HD_BG, ODD, EVEN = self._colors_for_mode()
+        pal = self._colors_for_mode()
 
         # --- Fonte e altura derivadas do tamanho configurado ---
         try:
-            base = tkfont.nametofont("TkDefaultFont")
-            family = base.cget("family")
+            base_font = tkfont.nametofont("TkDefaultFont")
+            family = base_font.cget("family")
             fsize = int(getattr(self, "_font_size", 10))
             row_font = tkfont.Font(family=family, size=fsize)
             head_font = tkfont.Font(family=family, size=fsize, weight="bold")
@@ -156,81 +194,136 @@ class ColumnToggleTree(ctk.CTkFrame):
             head_font = None
             row_h = 24
 
-        # corpo (usa rowheight calculado e fonte quando disponível)
-        kwargs_tv = dict(
-            background=BG,
-            fieldbackground=BG,
-            foreground=FG,
+        # corpo (aplica grid refinado)
+        tv_kwargs = dict(
+            background=pal["bg"],
+            fieldbackground=pal["bg"],
+            foreground=pal["fg"],
             rowheight=row_h,
-            bordercolor=GRID, lightcolor=GRID, darkcolor=GRID,
+            bordercolor=pal["grid_border"],
+            lightcolor=pal["grid_light"],
+            darkcolor=pal["grid_dark"],
             borderwidth=1,
         )
         if row_font is not None:
-            kwargs_tv["font"] = row_font
-        self._style.configure(
-            self._style_tv,
-            **kwargs_tv
-        )
+            tv_kwargs["font"] = row_font
+        self._style.configure(self._style_tv, **tv_kwargs)
         self._style.map(
             self._style_tv,
-            background=[("selected", SELBG)],
-            foreground=[("selected", SELF)],
+            background=[("selected", pal["sel_bg"])],
+            foreground=[("selected", pal["sel_fg"])],
         )
 
-        # cabeçalho (usa fonte em negrito quando disponível)
-        kwargs_hd = dict(
-            background=HD_BG,
-            foreground=FG,
+        # cabeçalho (mais cinza que o corpo + hover)
+        hd_kwargs = dict(
+            background=pal["header_bg"],
+            foreground=pal["fg"],
             relief="flat",
-            bordercolor=GRID,
+            bordercolor=pal["grid_border"],
+            lightcolor=pal["grid_light"],
+            darkcolor=pal["grid_dark"],
         )
         if head_font is not None:
-            kwargs_hd["font"] = head_font
-        self._style.configure(
-            self._style_hd,
-            **kwargs_hd
-        )
+            hd_kwargs["font"] = head_font
+        self._style.configure(self._style_hd, **hd_kwargs)
         self._style.map(
             self._style_hd,
-            background=[("active", HD_BG)],
+            background=[("active", pal["header_hover_bg"])],
             relief=[("pressed", "flat"), ("!pressed", "flat")],
         )
-        # como fallback, ajusta o heading padrão também
-        fallback_hd = {"background": HD_BG, "foreground": FG, "relief": "flat"}
+        # fallback no estilo padrão
+        fb_hd = {"background": pal["header_bg"], "foreground": pal["fg"], "relief": "flat"}
         if head_font is not None:
-            fallback_hd["font"] = head_font
-        self._style.configure("Treeview.Heading", **fallback_hd)
+            fb_hd["font"] = head_font
+        self._style.configure("Treeview.Heading", **fb_hd)
 
-        # zebra rows
+        # tags (hover/zebra)
         try:
-            self.tree.tag_configure("odd", background=ODD, foreground=FG)
-            self.tree.tag_configure("even", background=EVEN, foreground=FG)
+            self.tree.tag_configure("hover", background=pal["row_hover_bg"], foreground=pal["fg"])  # feedback visual rápido
+            self.tree.tag_configure("odd", background=pal["odd_bg"], foreground=pal["fg"])         # zebra
+            self.tree.tag_configure("even", background=pal["even_bg"], foreground=pal["fg"])       # zebra
         except Exception:
             pass
 
         self.update_idletasks()
+        try:
+            self._ensure_hover_binding()
+        except Exception:
+            pass
+
+    # ---------- hover ----------
+    def _ensure_hover_binding(self) -> None:
+        if getattr(self, "_hover_bound", False):
+            return
+        tv = self.tree
+        tv.bind("<Motion>", self._on_motion, add="+")
+        tv.bind("<Leave>", self._on_leave, add="+")
+        self._hover_iid = None
+        self._hover_bound = True
+
+    def _on_motion(self, event) -> None:
+        tv = self.tree
+        iid = tv.identify_row(event.y)
+        if not iid:
+            self._clear_hover(); return
+        if self._hover_iid == iid:
+            return
+        self._clear_hover()
+        if iid in set(tv.selection()):  # não sobrepor seleção
+            return
+        tags = set(tv.item(iid, "tags") or ())
+        tags.add("hover")
+        tv.item(iid, tags=tuple(tags))
+        self._hover_iid = iid
+
+    def _on_leave(self, _event) -> None:
+        self._clear_hover()
+
+    def _clear_hover(self) -> None:
+        if not getattr(self, "_hover_iid", None):
+            return
+        tv = self.tree
+        try:
+            tags = set(tv.item(self._hover_iid, "tags") or ())
+            if "hover" in tags:
+                tags.remove("hover")
+                tv.item(self._hover_iid, tags=tuple(tags))
+        finally:
+            self._hover_iid = None
 
     # ---------- utilidades ----------
-    def _maybe_open_menu(self, event):
+    def _maybe_open_menu(self, event) -> None:
         if self.tree.identify_region(event.x, event.y) == "heading":
+            # sincroniza checkmarks com estado atual de visibilidade
+            for col in self._all_cols:
+                var = self._col_vars.get(col)
+                if var is not None:
+                    var.set(bool(self._visible.get(col, True)))
             try:
                 self._menu.tk_popup(event.x_root, event.y_root)
             finally:
                 self._menu.grab_release()
 
-    def _toggle_col(self, col):
-        # alternar visibilidade
-        cur = self._visible.get(col, True)
-        self._visible[col] = not cur
-        shown = [c for c, v in self._visible.items() if v]
-        self.tree.configure(displaycolumns=shown)
-        # atualiza check no menu
-        try:
-            for i in range(self._menu.index("end") + 1):
-                label = self._menu.entrycget(i, "label")
-                self._menu.entryconfigure(i, onvalue=True, offvalue=False, variable=tk.BooleanVar(value=self._visible.get(label, True)))
-        except Exception:
-            pass
+    def _apply_hide(self, name: str) -> None:
+        self.tree.heading(name, text="")
+        self.tree.column(name, width=0, stretch=False)
+
+    def _apply_show(self, name: str) -> None:
+        self.tree.heading(name, text=name, anchor=self._col_anchor.get(name, "center"))
+        self.tree.column(name, width=self._col_widths.get(name, 120), anchor=self._col_anchor.get(name, "center"), stretch=True)
+
+    def _toggle_col(self, name: str) -> None:
+        # **Mantido simples como o original: alterna visibilidade**
+        vis = self._visible.get(name, True)
+        nvis = not vis
+        self._visible[name] = nvis
+        if nvis:
+            self._apply_show(name)
+        else:
+            self._apply_hide(name)
+        # refaz zebra
+        for i, iid in enumerate(self.tree.get_children("")):
+            self.tree.item(iid, tags=(("even" if i % 2 == 0 else "odd"),))
 
     # ---------- API de dados ----------
     def set_rows(self, rows):
@@ -244,69 +337,86 @@ class ColumnToggleTree(ctk.CTkFrame):
             self.tree.insert("", "end", values=values, tags=("__basefont__", zebra))
         self._auto_sort_if_needed()
 
-    def upsert_row(self, row: dict, key_cols=None):
-        """Atualiza (ou insere) com base em colunas-chave.
-        key_cols: lista de nomes de colunas. Se None, usa [primeira coluna].
-        """
-        if not key_cols:
-            key_cols = [self._all_cols[0]]
-        target_key = tuple(row.get(c, "") for c in key_cols)
-        # busca linear por enquanto; dataset tende a ser pequeno
-        match_iid = None
-        for iid in self.tree.get_children():
+    def upsert_row(self, row, key_cols=("MAC",)) -> None:
+        key = tuple(row.get(k, "") for k in key_cols)
+        target = None
+        for iid in self.tree.get_children(""):
             vals = self.tree.item(iid, "values")
-            cur = tuple(vals[self._all_cols.index(c)] for c in key_cols)
-            if cur == target_key:
-                match_iid = iid
+            cur_key = tuple(
+                vals[self._all_cols.index(k)] if k in self._all_cols else None for k in key_cols
+            )
+            if cur_key == key:
+                target = iid
                 break
-        values = [row.get(c, "") for c in self._all_cols]
-        if match_iid is None:
-            idx = len(self.tree.get_children())
-            zebra = ("even" if idx % 2 == 0 else "odd")
-            self.tree.insert("", "end", values=values, tags=("__basefont__", zebra))
+        values = [row.get(col, "") for col in self._all_cols]
+        if target is None:
+            i = len(self.tree.get_children(""))
+            tag = "even" if i % 2 == 0 else "odd"
+            self.tree.insert("", "end", values=values, tags=(tag,))
         else:
-            self.tree.item(match_iid, values=values)
+            self.tree.item(target, values=values)
         self._auto_sort_if_needed()
 
-    # ---------- Ordenação ----------
-    def set_auto_sort(self, col_name: str, ascending: bool = True):
-        """Define ordenação automática por coluna (quando set_rows/upsert_row)."""
-        if col_name not in self._all_cols:
+    def get_selected_row(self):
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        vals = self.tree.item(sel[0], "values")
+        return {col: vals[i] for i, col in enumerate(self._all_cols)}
+
+    # ---------- ordenação por cabeçalho ----------
+    def _on_heading_click(self, col: str) -> None:
+        if getattr(self, "_auto_sort_col", None) == col:
+            self._auto_sort_asc = not self._auto_sort_asc
+        else:
+            self._auto_sort_col = col
+            self._auto_sort_asc = True
+        self._sort_by(col, toggle=False)
+
+    def sort_by(self, col: str, ascending: bool | None = None) -> None:
+        self._auto_sort_col = col
+        if ascending is not None:
+            self._auto_sort_asc = bool(ascending)
+        self._sort_by(col, toggle=False)
+
+    def _sort_by(self, col: str, toggle: bool = True) -> None:
+        try:
+            idx = self._all_cols.index(col)
+        except ValueError:
             return
-        self._auto_sort_col = col_name
-        self._auto_sort_asc = bool(ascending)
-        # atrela o clique no cabeçalho
-        self.tree.heading(col_name, command=self._on_header_click)
-
-    def enable_header_sort(self):
-        for col in self._all_cols:
-            self.tree.heading(col, command=lambda c=col: self._sort_by(c, toggle=True))
-
-    def _on_header_click(self):
-        if self._auto_sort_col:
-            self._sort_by(self._auto_sort_col, toggle=True)
-
-    def _sort_by(self, col, toggle=False):
-        # coleta valores atuais
         children = list(self.tree.get_children(""))
-        idx = self._all_cols.index(col)
+
         def _key(iid):
             vals = self.tree.item(iid, "values")
             try:
-                return int(vals[idx])
+                return float(vals[idx])
             except Exception:
                 return str(vals[idx]).lower()
-        reverse = not self._auto_sort_asc if toggle else not self._auto_sort_asc
+
+        reverse = not getattr(self, "_auto_sort_asc", True)
         children.sort(key=_key, reverse=reverse)
         for i, iid in enumerate(children):
             self.tree.move(iid, "", i)
-        # alterna zebra
         for i, iid in enumerate(self.tree.get_children("")):
             self.tree.item(iid, tags=(("even" if i % 2 == 0 else "odd"),))
-        # alterna flag
         if toggle:
             self._auto_sort_asc = not self._auto_sort_asc
 
-    def _auto_sort_if_needed(self):
-        if self._auto_sort_col:
+    def _auto_sort_if_needed(self) -> None:
+        if getattr(self, "_auto_sort_col", None):
             self._sort_by(self._auto_sort_col, toggle=False)
+            
+
+"""
+# Plano (cores em **um único lugar**: `_colors_for_mode` no `ColumnToggleTree`)
+- `_colors_for_mode()` retorna **um `dict`** com **todas** as cores do tema.
+- `apply_style()` consome esse `dict`.
+- `set_table_colors(theme, **cores)` permite overrides em runtime.
+- Chaves: `bg`, `fg`, `header_bg`, `header_hover_bg`, `row_hover_bg`, `odd_bg`, `even_bg`, `sel_bg`, `sel_fg`, `grid_border`, `grid_light`, `grid_dark`.
+
+**Como customizar (neste arquivo)**
+- Edite `_THEME_COLORS["light"|"dark"]` com os hex desejados.
+- Agora o grid tem 3 tons: `grid_border`, `grid_light`, `grid_dark` (mapeados para `bordercolor`, `lightcolor`, `darkcolor`).
+- Ou chame `set_table_colors("dark", grid_border="#444", grid_light="#555", grid_dark="#222")` antes de criar a tabela.
+- `_colors_for_mode()` continua sendo a **única fonte** e retorna um `dict` usado por todo o widget.
+"""

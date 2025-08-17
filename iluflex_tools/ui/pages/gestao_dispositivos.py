@@ -15,6 +15,7 @@ from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import parse_rrf10_lines
 from iluflex_tools.core.settings import load_settings
 import time
+import re
 
 TABLE_FONT_SIZE = 12
 
@@ -111,6 +112,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
         self._style_discover_progress()
 
+        self.stopDiscoverBtn = ctk.CTkButton(bottom_frame,  text="Parar Busca", command=self._on_click_stop_discover)
+        self.stopDiscoverBtn.grid(row=0, column=2, padx=6, pady=6)
+        self.stopDiscoverBtn.grid_remove()  # oculto inicialmente
+
         # Oculta colunas de detalhes
         for col in ("FW", "HW", "Conectado a", "Sinal (dB)"):
             try:
@@ -126,6 +131,29 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self.table.enable_header_sort()
             except Exception:
                 pass
+
+        # --- Restaurar progresso persistido ---
+        try:
+            started = getattr(self._settings, "discovery_started_at", None)
+            timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 30))
+            if started:
+                end_ts = float(started) + float(max(timeout, 1))
+                remaining = end_ts - time.time()
+                if remaining > 0:
+                    self.discoverDevicesBtn.configure(text="Procurando…")
+                    try:
+                        self.stopDiscoverBtn.grid()
+                    except Exception:
+                        pass
+                    self._discover_timeout = max(timeout, 1)
+                    self._discover_end_time = end_ts
+                    self._discover_after = self.after(100, self._update_discover_progress)
+                else:
+                    # expirado → limpar persistência
+                    self._settings.discovery_started_at = None
+                    save_settings(self._settings)
+        except Exception:
+            pass
 
     def _toggle_auto_reconnect(self):
         try:
@@ -249,12 +277,73 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             if ev.get("type") != "rx":
                 return
             text = ev.get("text") or ""
+            
+            # --- ACK do comando SRF,15,9,<tempo> ---
+            if "RRF,15,9," in text:
+                for m in re.finditer(r"RRF,15,9,(\d+)", text):
+                    try:
+                        secs = int(m.group(1))
+                    except Exception:
+                        continue
+                    self.after(0, self._handle_rrf_15_1, secs)
+            
             devices = parse_rrf10_lines(text)
             if not devices:
                 return
             self.after(0, self.ingest_rrf10, devices)
         except Exception:
             pass
+
+    def _handle_rrf_15_1(self, seconds: int) -> None:
+        """
+        Confirmação da interface para SRF,15,9,<status>.
+        1 -> está na rede pública, avisa slaves, volta para privada em 2 segundos.
+        0 -> já está na rede privada, não faz mais nada
+        Em ambos: o comando foi aceito, e logo estará na rede privada.
+        """
+        # se foi parar (2s), cancelar o loop de progresso e resetar UI
+        try:
+            if getattr(self, "_discover_after", None):
+                try: self.after_cancel(self._discover_after)
+                except Exception: pass
+                self._discover_after = None
+            self.discover_progress.set(0)
+            self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
+            # esconder botão de parar a busca
+            self.stopDiscoverBtn.grid_remove()
+        except Exception:
+            pass
+
+        # agenda reconexão: após a troca de rede + 10s para a interface aceitar nova conexão
+        delay = 10 
+        self._schedule_reconnect_after(delay)
+ 
+    def _schedule_reconnect_after(self, delay_sec: int, window_sec: int = 20) -> None:
+        """Agenda tentativa de reconexão após 'delay_sec'. Se o switch de auto-reconnect
+        estiver desligado, ativa temporariamente por 'window_sec' segundos."""
+        try:
+            was_on = False
+            try:
+                was_on = bool(self.auto_reconnect.get())
+            except Exception:
+                was_on = False
+
+            def _start():
+                try:
+                    self._conn.auto_reconnect()
+                except Exception:
+                    pass
+                # se não estava ligado, para depois da janela
+                if not was_on:
+                    try:
+                        self.after(window_sec * 1000, lambda: self._conn.stop_auto_reconnect())
+                    except Exception:
+                        pass
+
+            self.after(int(delay_sec * 1000), _start)
+        except Exception:
+            pass
+
 
     # ------------------------------------------------------------------
     # Ações
@@ -273,6 +362,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self._send("SRF,10,255\r")
         except Exception:
             pass
+
     def _on_click_discover(self):
         """Envia comando para dispositivos irem para rede mesh pública."""
         timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 30))
@@ -300,6 +390,11 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self._discover_end_time = time.time() + self._discover_timeout
         self._discover_after = self.after(100, self._update_discover_progress)
 
+        # mostrar botão Parar Busca ao iniciar
+        self.stopDiscoverBtn.grid()
+
+
+
     def _update_discover_progress(self):
         remaining = self._discover_end_time - time.time()
         progress = 1.0 - max(remaining, 0) / float(self._discover_timeout)
@@ -308,6 +403,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             self.discover_progress.set(0)
             self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
             self._discover_after = None
+            # esconder ao concluir automaticamente
+            self.stopDiscoverBtn.grid_remove()
         else:
             self._discover_after = self.after(100, self._update_discover_progress)
 
@@ -317,6 +414,20 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             self.discover_progress.configure(fg_color=fg, progress_color=self.discoverDevicesBtn.cget("text_color"), border_width=0)
         except Exception:
             pass
+
+    def _on_click_stop_discover(self):
+        """Solicita parar a busca (SRF,15,9). Esconde o botão apenas após RRF,15,9"""
+        try:
+            # feedback imediato; aguardamos o ACK para esconder botão/zerar UI
+            try:
+                self.discoverDevicesBtn.configure(text="Parando…")
+            except Exception:
+                pass
+            if callable(self._send):
+                self._send("SRF,15,9\r")
+        except Exception:
+            pass
+
 
     # ---- Tema ----
     def on_theme_changed(self):

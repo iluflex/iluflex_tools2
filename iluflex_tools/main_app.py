@@ -83,9 +83,10 @@ class MainApp(ctk.CTk):
         for p in self.pages.values():
             p.grid(row=0, column=0, sticky="nsew")
 
-    def _apply_and_save_settings(self, theme: str, discovery_timeout_ms: int):
+    def _apply_and_save_settings(self, theme: str, discovery_timeout_ms: int, mesh_discovery_timeout_sec: int):
         self.settings.theme = theme
         self.settings.discovery_timeout_ms = int(discovery_timeout_ms)
+        self.settings.mesh_discovery_timeout_sec = int(mesh_discovery_timeout_sec)
         save_settings(self.settings)
 
         from iluflex_tools.theming.theme import apply_theme

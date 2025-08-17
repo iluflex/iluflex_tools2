@@ -18,15 +18,25 @@ class PreferenciasPage(ctk.CTkFrame):
         self.theme.set(s.theme); self.theme.pack(side="left")
 
         row2 = ctk.CTkFrame(self); row2.pack(fill="x", padx=10, pady=6)
-        ctk.CTkLabel(row2, text="Tempo padrão de descoberta (ms)").pack(side="left", padx=(6,8))
+        ctk.CTkLabel(row2, text="Tempo padrão de busca de interfaces (ms)").pack(side="left", padx=(6,8))
         self.timeout = ctk.CTkEntry(row2, width=120); self.timeout.insert(0, str(s.discovery_timeout_ms))
         self.timeout.pack(side="left")
+
+        row3 = ctk.CTkFrame(self); row3.pack(fill="x", padx=10, pady=6)
+        ctk.CTkLabel(row3, text="Tempo Padrão de Cadastro de Novos Dispositivos (segundos)").pack(side="left", padx=(6,8))
+        self.discover_timeout_entry = ctk.CTkEntry(row3, width=120); 
+        self.discover_timeout_entry.insert(0, str(s.mesh_discovery_timeout_sec))
+        self.discover_timeout_entry.pack(side="left")
 
         ctk.CTkButton(self, text="Salvar", command=self._save).pack(pady=12, padx=10, anchor="w")
 
     def _save(self):
         try:
             t = int(self.timeout.get())
+            discovery_t = int(self.discover_timeout_entry.get())
         except Exception:
             t = 2000
-        self.apply_and_save(theme=self.theme.get(), discovery_timeout_ms=t)
+        self.apply_and_save(theme=self.theme.get(), 
+                            discovery_timeout_ms=t,
+                            mesh_discovery_timeout_sec = discovery_t
+                            )

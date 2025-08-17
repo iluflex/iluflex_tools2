@@ -13,16 +13,24 @@ from typing import Dict, List
 
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import parse_rrf10_lines
+from iluflex_tools.core.settings import load_settings
+import time
 
 TABLE_FONT_SIZE = 12
 
 class GestaoDispositivosPage(ctk.CTkFrame):
     """Página de gestão de *dispositivos* (rede 485/mesh)."""
 
-    def __init__(self, master, send_func=None, conn=None):
+    def __init__(self, master, send_func=None, conn=None, settings=None):
         super().__init__(master)
         self._send = send_func  # função para enviar comandos TCP
         self._conn = conn       # ConnectionService para ouvir RX
+        self._settings = settings or load_settings()
+
+        # controle da barra de progresso do botão "Procurar Dispositivos"
+        self._discover_after: str | None = None
+        self._discover_end_time: float = 0.0
+        self._discover_timeout: int = 0
 
         # Estado local indexado por MAC
         self._rows_by_mac: Dict[str, Dict] = {}
@@ -82,9 +90,26 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         bottom_frame = ctk.CTkFrame(self)
         bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 20))
         self.listUpdateBtn = ctk.CTkButton(bottom_frame, text="Atualizar Lista", command=self._on_click_atualizar)
-        self.listUpdateBtn.grid(row=0, column = 0, padx=6, pady=6)
-        self.discoverDevicesBtn = ctk.CTkButton(bottom_frame, text="Procurar Dispositivos", command=self._on_click_discover)
-        self.discoverDevicesBtn.grid(row=0, column = 1, padx=6, pady=6)
+        self.listUpdateBtn.grid(row=0, column=0, padx=6, pady=6)
+
+        # botão "Procurar Dispositivos" com barra de progresso
+        self.discover_frame = ctk.CTkFrame(bottom_frame)
+        self.discover_frame.grid(row=0, column=1, padx=6, pady=6, sticky="ew")
+        self.discover_frame.grid_columnconfigure(0, weight=1)
+
+        self.discoverDevicesBtn = ctk.CTkButton(
+            self.discover_frame,
+            text="Procurar Dispositivos",
+            command=self._on_click_discover,
+        )
+        self.discoverDevicesBtn.grid(row=0, column=0, sticky="ew")
+
+        self.discover_progress = ctk.CTkProgressBar(self.discover_frame)
+        self.discover_progress.set(0)
+        # coloca progress bar abaixo do botão ocupando a mesma largura
+        self.discover_progress.grid(row=1, column=0, sticky="ew")
+
+        self._style_discover_progress()
 
         # Oculta colunas de detalhes
         for col in ("FW", "HW", "Conectado a", "Sinal (dB)"):
@@ -248,12 +273,56 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self._send("SRF,10,255\r")
         except Exception:
             pass
-
     def _on_click_discover(self):
         """Envia comando para dispositivos irem para rede mesh pública."""
+        timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 30))
         try:
             self._dataset.clear()
-
-
+            try:
+                self.table.set_rows([])
+            except Exception:
+                pass
+            if callable(self._send):
+                self._send(f"SRF,15,1,{timeout}\r")
         except Exception as e:
             print("Procurar Dispositivos Error: ", e)
+
+        # reinicia contagem e barra de progresso
+        if self._discover_after:
+            try:
+                self.after_cancel(self._discover_after)
+            except Exception:
+                pass
+            self._discover_after = None
+        self.discoverDevicesBtn.configure(text="Procurando…")
+        self.discover_progress.set(0)
+        self._discover_timeout = max(timeout, 1)
+        self._discover_end_time = time.time() + self._discover_timeout
+        self._discover_after = self.after(100, self._update_discover_progress)
+
+    def _update_discover_progress(self):
+        remaining = self._discover_end_time - time.time()
+        progress = 1.0 - max(remaining, 0) / float(self._discover_timeout)
+        self.discover_progress.set(progress)
+        if remaining <= 0:
+            self.discover_progress.set(0)
+            self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
+            self._discover_after = None
+        else:
+            self._discover_after = self.after(100, self._update_discover_progress)
+
+    def _style_discover_progress(self):
+        try:
+            fg = self.discoverDevicesBtn.cget("fg_color")
+            self.discover_progress.configure(fg_color=fg, progress_color=self.discoverDevicesBtn.cget("text_color"), border_width=0)
+        except Exception:
+            pass
+
+    # ---- Tema ----
+    def on_theme_changed(self):
+        self._style_discover_progress()
+        if hasattr(self.table, "apply_style"):
+            try:
+                self.table.apply_style()
+            except Exception:
+                pass

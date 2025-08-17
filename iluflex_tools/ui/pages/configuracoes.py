@@ -1,10 +1,10 @@
 import customtkinter as ctk
+from iluflex_tools.core.settings import load_settings, save_settings
 
 class PreferenciasPage(ctk.CTkFrame):
-    def __init__(self, master, get_settings, apply_and_save):
+    def __init__(self, master, get_settings):
         super().__init__(master)
         self.get_settings = get_settings
-        self.apply_and_save = apply_and_save
         self._build()
 
     def _build(self):
@@ -14,12 +14,14 @@ class PreferenciasPage(ctk.CTkFrame):
 
         row1 = ctk.CTkFrame(self); row1.pack(fill="x", padx=10, pady=6)
         ctk.CTkLabel(row1, text="Tema").pack(side="left", padx=(6,8))
-        self.theme = ctk.CTkOptionMenu(row1, values=["system", "dark", "light"])
-        self.theme.set(s.theme); self.theme.pack(side="left")
+        self.option_theme = ctk.CTkOptionMenu(row1, values=["system", "dark", "light"])
+        self.option_theme.set(s.theme)
+        self.option_theme.pack(side="left")
 
         row2 = ctk.CTkFrame(self); row2.pack(fill="x", padx=10, pady=6)
         ctk.CTkLabel(row2, text="Tempo padrão de busca de interfaces (ms)").pack(side="left", padx=(6,8))
-        self.timeout = ctk.CTkEntry(row2, width=120); self.timeout.insert(0, str(s.discovery_timeout_ms))
+        self.timeout = ctk.CTkEntry(row2, width=120)
+        self.timeout.insert(0, str(s.discovery_timeout_ms))
         self.timeout.pack(side="left")
 
         row3 = ctk.CTkFrame(self); row3.pack(fill="x", padx=10, pady=6)
@@ -31,12 +33,17 @@ class PreferenciasPage(ctk.CTkFrame):
         ctk.CTkButton(self, text="Salvar", command=self._save).pack(pady=12, padx=10, anchor="w")
 
     def _save(self):
+        s = load_settings()
         try:
-            t = int(self.timeout.get())
-            discovery_t = int(self.discover_timeout_entry.get())
+            s.discovery_timeout_ms = int(self.timeout.get())
+            s.mesh_discovery_timeout_sec = int(self.discover_timeout_entry.get())
+            s.theme = self.option_theme.get()
+        except Exception as e:
+            print("Valores inválidos em Configurações:", e)
+            return
+        save_settings(s)
+        try:
+            from iluflex_tools.theming.theme import apply_theme
+            apply_theme(s.theme)
         except Exception:
-            t = 2000
-        self.apply_and_save(theme=self.theme.get(), 
-                            discovery_timeout_ms=t,
-                            mesh_discovery_timeout_sec = discovery_t
-                            )
+            pass

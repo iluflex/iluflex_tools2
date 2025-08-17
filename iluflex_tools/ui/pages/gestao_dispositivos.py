@@ -13,7 +13,7 @@ from typing import Dict, List
 
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import parse_rrf10_lines
-from iluflex_tools.core.settings import load_settings
+from iluflex_tools.core.settings import load_settings, save_settings
 import time
 import re
 

@@ -4,7 +4,7 @@ from tkinter import ttk
 from iluflex_tools.theming.theme import apply_theme
 from iluflex_tools.core.state import AppState
 from iluflex_tools.core.services import ConnectionService, OtaService, IrService, NetworkService
-from iluflex_tools.core.settings import load_settings, save_settings, Settings
+from iluflex_tools.core.settings import load_settings, save_settings
 from iluflex_tools.ui.header import Header
 from iluflex_tools.ui.sidebar import Sidebar
 from iluflex_tools.ui.pages.dashboard import DashboardPage
@@ -22,12 +22,19 @@ from iluflex_tools.ui.pages.ajuda import AjudaPage
 class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        apply_theme()
+        apply_theme() # fallback inicial (mantém comportamento atual)
         self.title("iLuFlex Tools")
         self.geometry("900x700")
         self.minsize(800, 500)
 
         self.settings = load_settings()
+        # aplica o tema salvo no boot (evita iniciar sempre no "system")
+        try:
+            from iluflex_tools.theming.theme import apply_theme as _apply
+            _apply(self.settings.theme)
+        except Exception:
+            pass
+
         self.app_state = AppState(
             ip=self.settings.last_ip,
             port=self.settings.last_port
@@ -76,34 +83,12 @@ class MainApp(ctk.CTk):
         self.pages["preferencias"] = PreferenciasPage(
             self.content,
             get_settings=lambda: self.settings,
-            apply_and_save=self._apply_and_save_settings
         )
         self.pages["ajuda"] = AjudaPage(self.content)
 
         for p in self.pages.values():
             p.grid(row=0, column=0, sticky="nsew")
 
-    def _apply_and_save_settings(self, theme: str, discovery_timeout_ms: int, mesh_discovery_timeout_sec: int):
-        self.settings.theme = theme
-        self.settings.discovery_timeout_ms = int(discovery_timeout_ms)
-        self.settings.mesh_discovery_timeout_sec = int(mesh_discovery_timeout_sec)
-        save_settings(self.settings)
-
-        from iluflex_tools.theming.theme import apply_theme
-        apply_theme(self.settings.theme)
-
-        # 1º passe: retematiza imediatamente
-        def _notify():
-            for p in self.pages.values():
-                if hasattr(p, "on_theme_changed"):
-                    try:
-                        p.on_theme_changed()
-                    except Exception:
-                        pass
-
-        _notify()
-        # 2º passe: após o CTk estabilizar (corrige casos do "system")
-        self.after(100, _notify)
 
     def navigate(self, key: str):
         if key not in self.pages:

@@ -14,7 +14,7 @@ class Header(ctk.CTkFrame):
         self.title.grid(row=0, column=1, sticky="w")
 
         self.status_dot = ctk.CTkLabel(self, text="●", font=ctk.CTkFont(size=18))
-        self.status_text = ctk.CTkLabel(self, text="Servidor desconectado")
+        self.status_text = ctk.CTkLabel(self, text="Interface desconectada")
         self.status_dot.grid(row=0, column=2, padx=(0,6))
         self.status_text.grid(row=0, column=3, padx=(0,12))
 
@@ -22,4 +22,4 @@ class Header(ctk.CTkFrame):
 
     def set_connected(self, ok: bool):
         self.status_dot.configure(text_color="#2ecc71" if ok else "#e74c3c")
-        self.status_text.configure(text="Servidor conectado" if ok else "Servidor desconectado")
+        self.status_text.configure(text="Interface conectada" if ok else "Interface desconectada")

@@ -14,6 +14,7 @@ from typing import Dict, List
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import parse_rrf10_lines
 
+TABLE_FONT_SIZE = 12
 
 class GestaoDispositivosPage(ctk.CTkFrame):
     """Página de gestão de *dispositivos* (rede 485/mesh)."""
@@ -57,7 +58,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             font=ctk.CTkFont(size=16, weight="bold"),
         ).pack(side="left", padx=(4, 12))
 
-        ctk.CTkButton(bar, text="ATUALIZAR LISTA", command=self._on_click_atualizar).pack(side="left", padx=6)
+        
         self.auto_reconnect = ctk.CTkSwitch(bar, text="Auto reconectar", command=self._toggle_auto_reconnect)
         self.auto_reconnect.pack(side="left", padx=6)
 
@@ -76,7 +77,14 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.table.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
-        self.table.set_font_size(12)
+        self.table.set_font_size(TABLE_FONT_SIZE)
+
+        bottom_frame = ctk.CTkFrame(self)
+        bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 20))
+        self.listUpdateBtn = ctk.CTkButton(bottom_frame, text="Atualizar Lista", command=self._on_click_atualizar)
+        self.listUpdateBtn.grid(row=0, column = 0, padx=6, pady=6)
+        self.discoverDevicesBtn = ctk.CTkButton(bottom_frame, text="Procurar Dispositivos", command=self._on_click_discover)
+        self.discoverDevicesBtn.grid(row=0, column = 1, padx=6, pady=6)
 
         # Oculta colunas de detalhes
         for col in ("FW", "HW", "Conectado a", "Sinal (dB)"):
@@ -142,6 +150,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         )
         try:
             self.table.set_rows(self._dataset)
+            self.table.set_font_size(TABLE_FONT_SIZE)
         except Exception:
             # fallback: insere/atualiza linha-a-linha
             for r in self._dataset:
@@ -239,3 +248,12 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self._send("SRF,10,255\r")
         except Exception:
             pass
+
+    def _on_click_discover(self):
+        """Envia comando para dispositivos irem para rede mesh pública."""
+        try:
+            self._dataset.clear()
+
+
+        except Exception as e:
+            print("Procurar Dispositivos Error: ", e)

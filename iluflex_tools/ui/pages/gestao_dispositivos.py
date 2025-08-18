@@ -10,6 +10,7 @@ from __future__ import annotations
 import customtkinter as ctk
 from collections import Counter
 from typing import Dict, List
+import tkinter as tk  # local, para não mexer nos imports do arquivo
 
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService, parse_rrf10_lines
@@ -127,7 +128,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.sinalizarModuloBtn.grid(row=0, column=3, padx=6, pady=6)
 
         self.salvarModuloBtn = ctk.CTkButton(bottom_frame,  text="Salvar", command=self._on_click_salvarModulo)
-        self.salvarModuloBtn.grid(row=0, column=2, padx=6, pady=6)        
+        self.salvarModuloBtn.grid(row=0, column=4, padx=6, pady=6)        
 
         # Configurações da pagina
 
@@ -518,6 +519,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         try:
             self.table.tree.bind("<<TreeviewSelect>>", self._on_table_select, add="+")
             self.table.tree.bind("<Double-1>", self._on_table_double_click, add="+")
+            #self.table.tree.bind("<Double-Button-1>", self._on_table_double_click, add="+")
         except Exception:
             pass
 
@@ -548,27 +550,58 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             pass
 
 
-    def _on_table_double_click(self, event) -> None:
-        """Permite editar in‑place apenas colunas: 'Slave ID' e 'Nome'."""
+ 
+    def _tree_columns(self) -> list[str]:
         try:
-            tree = self.table.tree
-            row_iid = tree.identify_row(event.y)
-            col_id = tree.identify_column(event.x)  # ex.: "#1"
-            if not row_iid or not col_id:
-                return
-            col_idx = int(col_id[1:]) - 1
-            if col_idx < 0 or col_idx >= len(self.table._all_cols):
-                return
-            col_name = self.table._all_cols[col_idx]
-            if col_name not in ("Slave ID", "Nome"):
-                return  # campos fixos não editáveis
-            self._start_cell_edit(row_iid, col_idx, col_name)
+            return list(self.table.tree.cget("columns") or ())
         except Exception:
-            pass
+            try:
+                return list(getattr(self.table, "_all_cols", []) or [])
+            except Exception:
+                return []
 
 
-    def _start_cell_edit(self, row_iid: str, col_idx: int, col_name: str) -> None:
-        tree = self.table.tree
+    def _on_table_double_click(self, event):
+        """Edita in-place apenas 'Slave ID' e 'Nome'. Retorna 'break' p/ bloquear binds globais."""
+        try:
+            tree = getattr(event, "widget", None)
+            print(f"[Duplo Click na tabela] tree {tree}")
+            if tree is None or not hasattr(tree, "identify_column"):
+                tree = self.table.tree
+
+            # Garante que é célula
+            region = tree.identify_region(event.x, event.y)
+            print(f"[Duplo Click na tabela] region {region}")
+            if region != "cell":
+                return  # deixa outros binds seguirem
+
+            row_iid = tree.identify_row(event.y)
+            col_token = tree.identify_column(event.x)  # ex.: "#1"
+            print(f"[Duplo Click na tabela] row_iid: {row_iid} col_token: {col_token}")
+            if not row_iid or not col_token:
+                return
+
+            # Resolve para o nome da coluna definido no Treeview
+            idx0 = int(col_token[1:]) - 1
+            columns = self._tree_columns()
+            if idx0 < 0 or idx0 >= len(columns):
+                return
+            col_name = columns[idx0]  # aqui são exatamente as keys dadas em cols[...]["key"]
+            print(f"[Duplo Click na tabela] idx0: {idx0} columns: {columns}, col_name: {col_name}")
+
+            # Somente campos editáveis
+            if col_name not in ("Slave ID", "Nome"):
+                return
+
+            # Inicia edição e BLOQUEIA propagação (evita bind global da página conexão)
+            self._start_cell_edit(tree, row_iid, idx0, col_name)
+            return "break"
+        except Exception:
+            return  # deixa seguir caso algo dê errado
+
+
+    def _start_cell_edit(self, tree, row_iid: str, col_idx: int, col_name: str) -> None:
+        print(f"[Start cell edit] row_iid: {row_iid} , col_idx: {col_idx} int, col_name: {col_name} ")
         # Fecha editor anterior, se houver
         if self._cell_editor is not None:
             try:
@@ -578,18 +611,25 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                     self._cancel_cell_edit()
                 except Exception:
                     pass
-
-        # Bounding box da célula
+        
+        # Garante que a linha está visível e pega bbox
         try:
+            tree.see(row_iid)
             x, y, w, h = tree.bbox(row_iid, f"#{col_idx+1}")
         except Exception:
             return
         if not w or not h:
             return
+        print(f"[Start cell edit] x, y, w, h {x, y, w, h}")
+        # Converte para coordenadas do toplevel (absolutas -> relativas ao topo da janela)
+        tl = self.winfo_toplevel()
+        px = tree.winfo_rootx() + x - tl.winfo_rootx()
+        py = tree.winfo_rooty() + y - tl.winfo_rooty()
 
         # Valor atual e MAC
         current_value = tree.set(row_iid, col_name)
         mac_value = tree.set(row_iid, "Mac Address")
+        print(f"[Start cell edit] mac_value {mac_value}")
 
         # Baseline (primeira edição desse MAC)
         if mac_value and mac_value not in self._edited_rows:
@@ -599,16 +639,21 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             }
             self._edited_rows[mac_value] = {"__baseline": baseline}
 
-        # Editor (CTkEntry) posicionado sobre a célula
-        editor = ctk.CTkEntry(self.table)
+        print(f"[Start cell edit] baseline: {baseline}")
+
+        # tk.Entry funciona em qualquer tema; evita incompatibilidade de CTkEntry como filho de Tk widgets
+        editor = tk.Entry(tree, relief="flat", borderwidth=1, highlightthickness=1)
         editor.insert(0, str(current_value))
         editor.select_range(0, "end")
-        editor.focus_set()
         editor.place(x=x, y=y, width=w, height=h)
+
+        # Foco confiável (após pipeline de eventos do duplo clique)
+        tree.after_idle(editor.focus_force)
 
         # Guarda contexto
         self._cell_editor = editor
         self._cell_editor_info = {
+            "tree": tree,
             "iid": row_iid,
             "col_idx": col_idx,
             "col_name": col_name,
@@ -618,8 +663,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
         # Binds do editor
         editor.bind("<Return>", lambda e: self._commit_cell_edit())
+        editor.bind("<KP_Enter>", lambda e: self._commit_cell_edit())
         editor.bind("<Escape>", lambda e: self._cancel_cell_edit())
         editor.bind("<FocusOut>", lambda e: self._commit_cell_edit())
+ 
 
 
     def _sanitize_slave_id(self, value: str) -> str:
@@ -633,6 +680,14 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         if n > 255:
             n = 255
         return str(n)
+
+
+    def _mac_compact(self, mac: str | None) -> str:
+        """Remove separadores (ex.: ':', '-', '.') e mantém apenas [0-9A-Za-z]."""
+        try:
+            return re.sub(r"[^0-9A-Za-z]", "", mac or "")
+        except Exception:
+            return (mac or "").replace(":", "").replace("-", "").replace(".", "")
 
 
     def _commit_cell_edit(self) -> None:
@@ -720,7 +775,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             return {}
 
-
     # -------------------- COMANDOS --------------------
 
     def _on_click_sinalizarModulo(self) -> None:
@@ -776,8 +830,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                     slave_id = str(row.get("Slave ID", ""))
                     nome = str(row.get("Nome", ""))
 
-                cmd = f"SRF,15,5,{safe_mac},{slave_id},{nome}
-    "
+                cmd = f"SRF,15,5,{safe_mac},{slave_id},{nome}\r"
                 if callable(self._send):
                     self._send(cmd)
 

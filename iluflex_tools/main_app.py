@@ -79,7 +79,7 @@ class MainApp(ctk.CTk):
             conn=self.conn,
         )
         # >>> alteração: passa conn também, para a página ouvir RX de RRF,10
-        self.pages["gestao_dispositivos"] = GestaoDispositivosPage(self.content, send_func=self.conn.send, conn=self.conn)
+        self.pages["gestao_dispositivos"] = GestaoDispositivosPage(self.content, conn=self.conn)
         self.pages["fw_upgrade"] = FWUpgradePage(self.content, run_ota=self.ota.run_fw_upgrade)
         self.pages["comandos_ir"] = ComandosIRPage(self.content, ir_service=self.ir, conn=self.conn)
         self.pages["interface_programacao"] = InterfaceProgramacaoPage(self.content)
@@ -99,6 +99,14 @@ class MainApp(ctk.CTk):
             return
         self.pages[key].tkraise()
         self.sidebar.set_active(key)
+        
+        if key == "gestao_dispositivos":
+            # dispara a mesma ação do botão, mas só se já estiver conectado
+            try:
+                self.after(50, self.pages[key].on_page_activated)
+            except Exception:
+                pass
+
 
     def _toggle_sidebar_collapse(self):
         self.sidebar.set_collapsed(not self.sidebar.collapsed)

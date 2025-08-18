@@ -12,7 +12,7 @@ from collections import Counter
 from typing import Dict, List
 
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
-from iluflex_tools.core.services import parse_rrf10_lines
+from iluflex_tools.core.services import ConnectionService, parse_rrf10_lines
 from iluflex_tools.core.settings import load_settings, save_settings
 import time
 import re
@@ -22,11 +22,11 @@ TABLE_FONT_SIZE = 12
 class GestaoDispositivosPage(ctk.CTkFrame):
     """Página de gestão de *dispositivos* (rede 485/mesh)."""
 
-    def __init__(self, master, send_func=None, conn=None, settings=None):
+    def __init__(self, master, conn: ConnectionService, send_func=None):
         super().__init__(master)
-        self._send = send_func  # função para enviar comandos TCP
         self._conn = conn       # ConnectionService para ouvir RX
-        self._settings = settings or load_settings()
+        self._send = send_func or self._conn.send  # função para enviar comandos TCP
+        self._settings = load_settings()
 
         # controle da barra de progresso do botão "Procurar Dispositivos"
         self._discover_after: str | None = None
@@ -286,7 +286,12 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                         secs = int(m.group(1))
                     except Exception:
                         continue
-                    self.after(0, self._handle_rrf_15_1, secs)
+                    self.after(0, self._handle_rrf_15_9, secs)
+
+            timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 120))
+            if text.strip() == f"RRF,15,1,{timeout}":
+                print("vai atualizar em 15 seg")
+                self.after(15000, self._on_click_atualizar)
             
             devices = parse_rrf10_lines(text)
             if not devices:
@@ -295,7 +300,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             pass
 
-    def _handle_rrf_15_1(self, seconds: int) -> None:
+    def _handle_rrf_15_9(self, seconds: int) -> None:
         """
         Confirmação da interface para SRF,15,9,<status>.
         1 -> está na rede pública, avisa slaves, volta para privada em 2 segundos.
@@ -315,35 +320,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             pass
 
-        # agenda reconexão: após a troca de rede + 10s para a interface aceitar nova conexão
-        delay = 10 
-        self._schedule_reconnect_after(delay)
- 
-    def _schedule_reconnect_after(self, delay_sec: int, window_sec: int = 20) -> None:
-        """Agenda tentativa de reconexão após 'delay_sec'. Se o switch de auto-reconnect
-        estiver desligado, ativa temporariamente por 'window_sec' segundos."""
-        try:
-            was_on = False
-            try:
-                was_on = bool(self.auto_reconnect.get())
-            except Exception:
-                was_on = False
 
-            def _start():
-                try:
-                    self._conn.auto_reconnect()
-                except Exception:
-                    pass
-                # se não estava ligado, para depois da janela
-                if not was_on:
-                    try:
-                        self.after(window_sec * 1000, lambda: self._conn.stop_auto_reconnect())
-                    except Exception:
-                        pass
-
-            self.after(int(delay_sec * 1000), _start)
-        except Exception:
-            pass
 
 
     # ------------------------------------------------------------------
@@ -368,6 +345,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     def _on_click_atualizar(self):
         """Solicita a lista completa e reseta realces."""
+        print("atualizar lista")
         try:
             self._rows_by_mac.clear()
             self._dataset.clear()
@@ -378,20 +356,23 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 pass
             if callable(self._send):
                 self._send("SRF,10,255\r")
-        except Exception:
+            else:
+                print("no callable")
+        except Exception as e:
+            print(["GestaoDispositivos Erro:", e])
             pass
 
     def _on_click_discover(self):
         """Envia comando para dispositivos irem para rede mesh pública."""
-        timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 30))
+        timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 120))
+        print(f"Busca Dispositivos por {timeout} seg")
         try:
             self._dataset.clear()
-            try:
-                self.table.set_rows([])
-            except Exception:
-                pass
+            self.table.set_rows([])
             if callable(self._send):
                 self._send(f"SRF,15,1,{timeout}\r")
+            else:
+                print("Erro não fez send SRF,15,1 ")
         except Exception as e:
             print("Procurar Dispositivos Error: ", e)
 
@@ -410,6 +391,18 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
         # mostrar botão Parar Busca ao iniciar
         self.stopDiscoverBtn.grid()
+
+        # força ligar auto‑reconnect **antes** do comando e mantém ligado
+        self.auto_reconnect.select()
+        
+        try:
+            self._conn.auto_reconnect()
+        except Exception as e:
+            print("[Pagina Gestao Dispositivos] Erro ao ativar auto_reconnect", e)
+            pass
+
+
+
 
 
 
@@ -455,3 +448,46 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self.table.apply_style()
             except Exception:
                 pass
+
+
+   # --------------------- Auto‑reconnect ---------------------
+    def _service_auto_enabled(self) -> bool:
+        """Inferir estado real do serviço (não há getter público)."""
+        try:
+            thr = getattr(self._conn, "_auto_thread", None)
+            ev = getattr(self._conn, "_auto_stop", None)
+            return bool(thr and getattr(thr, "is_alive", lambda: False)() and ev and not ev.is_set())
+        except Exception:
+            return False
+
+    def _sync_auto_switch_from_service(self) -> None:
+        try:
+            if self._service_auto_enabled():
+                self.auto_reconnect.select()
+            else:
+                self.auto_reconnect.deselect()
+        except Exception:
+            self.auto_reconnect.deselect()
+
+    def _on_toggle_auto(self) -> None:
+        enabled = bool(self.auto_reconnect.get())
+        try:
+            if enabled:
+                self._conn.auto_reconnect()
+            else:
+                self._conn.stop_auto_reconnect()
+        except Exception:
+            pass
+
+
+    #------------ Navegação para essa página ----------------
+    def _maybe_autorefresh(self):
+        try:
+            if getattr(self._conn, "connected", False):
+                self._on_click_atualizar()
+        except Exception:
+            pass
+
+    def on_page_activated(self) -> None:
+        """Chamar ao navegar para esta página para auto‑atualizar se conectado."""
+        self._maybe_autorefresh()

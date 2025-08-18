@@ -68,8 +68,16 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         ).pack(side="left", padx=(4, 12))
 
         
-        self.auto_reconnect = ctk.CTkSwitch(bar, text="Auto reconectar", command=self._toggle_auto_reconnect)
-        self.auto_reconnect.pack(side="left", padx=6)
+        self.auto_reconnect = ctk.CTkSwitch(bar, text="Auto reconectar", command=self._on_toggle_auto_reconnect)
+        self.auto_reconnect.pack(side="right", padx=6)
+        # refletir estado real do serviço
+        try:
+            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
+                self.auto_reconnect.select()
+            else:
+                self.auto_reconnect.deselect()
+        except Exception:
+            self.auto_reconnect.deselect()
 
         # Tabela
         cols = [
@@ -155,14 +163,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             pass
 
-    def _toggle_auto_reconnect(self):
-        try:
-            if self.auto_reconnect.get():
-                self._conn.auto_reconnect()
-            else:
-                self._conn.stop_auto_reconnect()
-        except Exception:
-            pass
+
 
     # ------------------------------------------------------------------
     # Ingestão de RRF,10
@@ -348,6 +349,23 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Ações
     # ------------------------------------------------------------------
+        
+    def _on_toggle_auto_reconnect(self):
+        if self._conn is None:
+            print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self._conn é None")
+            return
+        enabled = bool(self.auto_reconnect.get())
+        # print(f"[ConexaoPage] toggle auto -> {enabled}")
+        try:
+            if hasattr(self._conn, "enable_auto_reconnect"):
+                self._conn.enable_auto_reconnect(enabled)
+            else:
+                (self._conn.auto_reconnect() if enabled else self._conn.stop_auto_reconnect())
+        except Exception as e:
+            print("[GestaoDispositivosPage] Erro ao alternar auto-reconnect:", e)
+
+
+
     def _on_click_atualizar(self):
         """Solicita a lista completa e reseta realces."""
         try:

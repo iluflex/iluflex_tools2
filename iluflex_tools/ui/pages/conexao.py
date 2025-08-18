@@ -74,8 +74,9 @@ class ConexaoPage(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(self)
         btns.grid(row=4, column=0, columnspan=3, pady=8)
-        self.auto_reconnect = ctk.CTkSwitch(btns, text="Auto reconectar")
+        self.auto_reconnect = ctk.CTkSwitch(btns, text="Auto reconectar", command=self._on_toggle_auto)
         self.auto_reconnect.pack(side="left", padx=6)
+        
         ctk.CTkButton(btns, text="Conectar", command=self._connect).pack(side="left", padx=6)
         ctk.CTkButton(btns, text="Desconectar", command=self._disconnect).pack(side="left", padx=6)
 
@@ -85,6 +86,15 @@ class ConexaoPage(ctk.CTkFrame):
         self.status_led.pack(side="left", padx=(0,6))
         self.status = ctk.CTkLabel(status_frame, text="Pronto.")
         self.status.pack(side="left")
+
+        # refletir estado real do serviço
+        try:
+            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
+                self.auto_reconnect.select()
+            else:
+                self.auto_reconnect.deselect()
+        except Exception:
+            self.auto_reconnect.deselect()
 
     # ---- Ações ----
     def _on_row_double_click(self, _event=None):
@@ -112,13 +122,70 @@ class ConexaoPage(ctk.CTkFrame):
             pass
         self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
 
-    def _disconnect(self):
-        (self._conn.disconnect() if self._conn is not None else None)
+
+    def _connect(self):
+        ip = self.ip_entry.get().strip()
+        port = int(self.port_entry.get().strip() or 0)
+        desired_auto = bool(self.auto_reconnect.get())
+        if self._conn is None:
+            print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")
+            self.status.configure(text="Falha na conexão")
+            return
+        # evitar corrida: desliga auto enquanto troca de conexão (inclui duplo clique já conectado)
         try:
-            self._conn.stop_auto_reconnect()
+            if hasattr(self._conn, "enable_auto_reconnect"):
+                self._conn.enable_auto_reconnect(False)
+            else:
+                self._conn.stop_auto_reconnect()
         except Exception:
             pass
-        self.status.configure(text="Desconectado.")
+        ok = bool(self._conn.connect(ip, port))
+        print(f"[ConexaoPage] connect({ip}:{port}) -> ok={ok}")
+        # aplica estado desejado do switch após conectar (ou manter tentando, se falhou)
+        try:
+            if hasattr(self._conn, "enable_auto_reconnect"):
+                self._conn.enable_auto_reconnect(desired_auto)
+            else:
+                (self._conn.auto_reconnect() if desired_auto else self._conn.stop_auto_reconnect())
+        except Exception as e:
+            print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
+        self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
+
+
+
+    def _disconnect(self):
+        if self._conn is None:
+            print("[ConexaoPage] _disconnect: self._conn é None")
+            self.status.configure(text="Desconectado.")
+            return
+        # usuário pediu desconectar => NUNCA ficar tentando reconectar
+        try:
+            if hasattr(self._conn, "enable_auto_reconnect"):
+                self._conn.enable_auto_reconnect(False)
+            else:
+                self._conn.stop_auto_reconnect()
+        except Exception:
+            pass
+        try:
+            self._conn.disconnect()
+        finally:
+            self.auto_reconnect.deselect()
+            self.status.configure(text="Desconectado.")
+
+    def _on_toggle_auto(self):
+        if self._conn is None:
+            print("[ConexaoPage] _on_toggle_auto: self._conn é None")
+            return
+        enabled = bool(self.auto_reconnect.get())
+        # print(f"[ConexaoPage] toggle auto -> {enabled}")
+        try:
+            if hasattr(self._conn, "enable_auto_reconnect"):
+                self._conn.enable_auto_reconnect(enabled)
+            else:
+                (self._conn.auto_reconnect() if enabled else self._conn.stop_auto_reconnect())
+        except Exception as e:
+            print("[ConexaoPage] Erro ao alternar auto-reconnect:", e)
+
 
     def _buscar(self):
         if self._scan_thread and self._scan_thread.is_alive():

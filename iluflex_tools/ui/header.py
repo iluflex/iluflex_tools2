@@ -30,9 +30,9 @@ class Header(ctk.CTkFrame):
         self.title.grid(row=0, column=1, sticky="w")
 
         # self.status_led = ctk.CTkLabel(self, text="●", font=ctk.CTkFont(size=20))
-        self.status_led = StatusLed(self, conn=self.conn)
+        self.status_led = StatusLed(self, conn=self.conn, size=24)
         self.status_led.grid(row=0, column=2, padx=(0,6))
-        self.status_text = ctk.CTkLabel(self, text="Interface desconectada")
+        self.status_text = ctk.CTkLabel(self, text="Desconectado")
         self.status_text.grid(row=0, column=3, padx=(0,12), pady = 8)
 
     # ---- eventos da conexão ----
@@ -48,7 +48,7 @@ class Header(ctk.CTkFrame):
         elif typ in ("disconnect", "error"):
             # mantém info do último remoto, útil para o usuário
             suffix = f" {ip}:{port}" if ip else ""
-            self.status_text.configure(text=f"Interface desconectada{suffix}")
+            self.status_text.configure(text=f"Desconectado")
 
     def destroy(self):
         try:

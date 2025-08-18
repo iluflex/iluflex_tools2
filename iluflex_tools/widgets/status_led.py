@@ -1,23 +1,29 @@
 import customtkinter as ctk
 from iluflex_tools.core.services import ConnectionService
 
+
+
 class StatusLed(ctk.CTkFrame):
-    """Pequeno indicador em forma de LED para status de conexão."""
+    """Indicador de status de conexão com fundo transparente usando um label "●".
+    `size` controla o tamanho da fonte do ponto.
+    """
     def __init__(self, master, conn: ConnectionService | None = None, size: int = 12, **kwargs):
-        super().__init__(master, width=size, height=size, **kwargs)
-        self._size = size
+        # fundo transparente por padrão
+        fg = kwargs.pop("fg_color", "transparent")
+        super().__init__(master, fg_color=fg, **kwargs)
+        self._size = int(size)
         self._conn: ConnectionService | None = None
         self._listener = lambda ev: self._on_event(ev)
-        self.canvas = ctk.CTkCanvas(self, width=size, height=size, highlightthickness=0)
-        self.canvas.pack()
-        self._set_color("#666666")
+        # usa label com ponto para herdar transparência do CTk
+        self._font = ctk.CTkFont(size=self._size)
+        self._lbl = ctk.CTkLabel(self, text="●", font=self._font, text_color="#666666", fg_color="transparent")
+        self._lbl.pack(padx=0, pady=0)
         if conn is not None:
             self.bind_conn(conn)
 
     def _set_color(self, color: str):
-        s = self._size
-        self.canvas.delete("all")
-        self.canvas.create_oval(1, 1, s - 1, s - 1, fill=color, outline="")
+        self._lbl.configure(text_color=color)
+
 
     def _on_event(self, ev: dict):
         typ = ev.get("type")

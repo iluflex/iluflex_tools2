@@ -29,6 +29,7 @@ class ConnectionService:
         self._auto_stop = threading.Event()
         self._auto_interval = 5.0
         self._listener_lock = threading.Lock()
+        self._auto_reconnect_enabled = False  # quando True, desconexões disparam auto‑reconnect
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
@@ -55,6 +56,10 @@ class ConnectionService:
         self.disconnect()  # encerra conexão anterior, se houver
         self._remote = (ip, port)
         try:
+            # notifica UI que vamos tentar conectar
+            ts0 = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self._emit({"type": "connecting", "ts": ts0, "remote": self._remote})
+
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(timeout)
             print(f"[CONNECT] tentando {ip}:{port} ...")
@@ -79,7 +84,7 @@ class ConnectionService:
 
     def auto_reconnect(self, interval: float = 5.0):
         """Tenta reconectar periodicamente após desconexão."""
-        self._auto_interval = max(0.1, interval)
+        self._auto_interval = max(1.0, interval)
         # encerra thread anterior, se houver
         self._auto_stop.set()
         if self._auto_thread and self._auto_thread.is_alive():
@@ -91,6 +96,14 @@ class ConnectionService:
         self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
         self._auto_thread.start()
 
+    def enable_auto_reconnect(self, enabled: bool = True, interval: float = 5.0):
+        """Liga/desliga auto‑reconnect sem a UI precisar escutar eventos."""
+        self._auto_reconnect_enabled = bool(enabled)
+        if enabled:
+            self.auto_reconnect(interval)
+        else:
+            self.stop_auto_reconnect()
+
     def stop_auto_reconnect(self):
         self._auto_stop.set()
 
@@ -100,7 +113,11 @@ class ConnectionService:
                 continue
             ip, port = self._remote
             if ip and port:
+                # avisa UI que estamos tentando reconectar
+                ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self._emit({"type": "reconnecting", "ts": ts, "remote": self._remote})
                 self.connect(ip, port)
+
 
     def disconnect(self):
         if self._sock:
@@ -119,6 +136,13 @@ class ConnectionService:
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "disconnect", "ts": ts, "remote": self._remote})
         self.connected = False
+        # se o modo auto estiver habilitado e a thread não estiver ativa, (re)inicia
+        if self._auto_reconnect_enabled and not (self._auto_thread and self._auto_thread.is_alive()):
+            try:
+                self.auto_reconnect(self._auto_interval)
+            except Exception:
+                pass
+
 
     def _recv_loop(self):
         assert self._sock is not None
@@ -170,6 +194,10 @@ class ConnectionService:
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
             self.disconnect()
             return False
+        
+    # ---- util ----
+    def get_remote(self) -> tuple[str, int]:
+        return self._remote
 
 # --------- OTA Services ---------
 class OtaService:

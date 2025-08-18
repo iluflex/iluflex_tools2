@@ -40,7 +40,6 @@ class MainApp(ctk.CTk):
             port=self.settings.last_port
         )
         self.conn = ConnectionService()
-        self.conn.add_listener(self._on_conn_event)
         self.ota = OtaService()
         self.ir = IrService()
         self.net = NetworkService()
@@ -48,7 +47,7 @@ class MainApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
-        self.header = Header(self, on_toggle_collapse=self._toggle_sidebar_collapse)
+        self.header = Header(self, conn=self.conn, on_toggle_collapse=self._toggle_sidebar_collapse)
         self.header.grid(row=0, column=0, columnspan=2, sticky="ew")
 
         self.sidebar = Sidebar(self, on_nav=self.navigate, collapsed=False)
@@ -64,15 +63,20 @@ class MainApp(ctk.CTk):
         # self._apply_global_table_font(nsize=10)  # Aplica fonte global para todas as tabelas não funciona
         self.navigate("dashboard")
 
+        # habilita auto‑reconnect (sem o main ouvir eventos)
+        try:
+            self.conn.enable_auto_reconnect(True, interval=5.0)
+        except Exception:
+            pass
+
     def _mount_pages(self):
         self.pages["dashboard"] = DashboardPage(self.content, on_quick_nav=self.navigate)
         self.pages["conexao"] = ConexaoPage(
             self.content,
-            on_connect=self._do_connect,
-            on_disconnect=self._do_disconnect,
             get_state=lambda: self.app_state,
             scan_func=self.net.scan_masters,
             get_discovery_timeout=lambda: self.settings.discovery_timeout_ms,
+            conn=self.conn,
         )
         # >>> alteração: passa conn também, para a página ouvir RX de RRF,10
         self.pages["gestao_dispositivos"] = GestaoDispositivosPage(self.content, send_func=self.conn.send, conn=self.conn)
@@ -98,38 +102,6 @@ class MainApp(ctk.CTk):
 
     def _toggle_sidebar_collapse(self):
         self.sidebar.set_collapsed(not self.sidebar.collapsed)
-
-    def _on_conn_event(self, ev: dict):
-        t = ev.get("type")
-        if t == "disconnect":
-            self.app_state.connected = False
-            self.header.set_connected(False)
-            page = self.pages.get("conexao")
-            if page and hasattr(page, "status"):
-                try:
-                    page.status.configure(text="Desconectado.")
-                except Exception:
-                    pass
-        elif t == "connect":
-            self.app_state.connected = True
-            self.header.set_connected(True)
-
-
-    def _do_connect(self, ip: str, port: int) -> bool:
-        ok = self.conn.connect(ip, port)
-        self.app_state.connected = ok
-        self.app_state.ip, self.app_state.port = ip, port
-        self.header.set_connected(ok)
-        self.settings.last_ip = ip
-        self.settings.last_port = port
-        save_settings(self.settings)
-
-        return ok
-
-    def _do_disconnect(self):
-        self.conn.disconnect()
-        self.app_state.connected = False
-        self.header.set_connected(False)
 
 def main():
     app = MainApp()

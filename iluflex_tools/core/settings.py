@@ -10,7 +10,7 @@ SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
 class Settings:
     theme: str = "system"            # "system" | "dark" | "light"
     discovery_timeout_ms: int = 2000 # tempo padrão para buscar interfaces na rede via UDP para conexão via socket
-    mesh_discovery_timeout_sec = 120 # tempo padrão para Descorir Novos Dispositivos na Rede Mesh
+    mesh_discovery_timeout_sec: int = 120 # tempo padrão para Descorir Novos Dispositivos na Rede Mesh
     last_ip: str = "192.168.1.70"
     last_port: int = 4999
 

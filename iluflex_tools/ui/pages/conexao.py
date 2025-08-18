@@ -10,16 +10,12 @@ class ConexaoPage(ctk.CTkFrame):
     def __init__(
         self,
         master,
-        on_connect,
-        on_disconnect,
         get_state,
         scan_func=None,
         get_discovery_timeout=None,
         conn: ConnectionService | None = None,
     ):
         super().__init__(master)
-        self.on_connect = on_connect
-        self.on_disconnect = on_disconnect
         self.get_state = get_state
         self.scan_func = scan_func or (lambda timeout_ms: [])
         self.get_discovery_timeout = get_discovery_timeout or (lambda: 2000)
@@ -104,18 +100,20 @@ class ConexaoPage(ctk.CTkFrame):
     def _connect(self):
         ip = self.ip_entry.get().strip()
         port = int(self.port_entry.get().strip() or 0)
-        ok = self.on_connect(ip, port)
+        ok = bool(self._conn.connect(ip, port)) if self._conn is not None else False
+        print(f"Tentou conectar ok = {ok}")
         try:
             if self.auto_reconnect.get():
                 self._conn.auto_reconnect()
             else:
                 self._conn.stop_auto_reconnect()
-        except Exception:
+        except Exception as e:
+            print("Erro ao tentar reconectar:", e)
             pass
         self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
 
     def _disconnect(self):
-        self.on_disconnect()
+        (self._conn.disconnect() if self._conn is not None else None)
         try:
             self._conn.stop_auto_reconnect()
         except Exception:

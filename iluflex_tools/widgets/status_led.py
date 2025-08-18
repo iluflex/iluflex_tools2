@@ -26,7 +26,9 @@ class StatusLed(ctk.CTkFrame):
         elif typ == "disconnect":
             self._set_color("#e74c3c")  # vermelho
         elif typ == "error":
-            self._set_color("#e67e22")  # laranja
+            self._set_color("#E622C5")  # laranja
+        elif typ in ("connecting", "reconnecting"):
+            self._set_color("#f1c40f")  # amarelo
 
     def bind_conn(self, conn: ConnectionService | None):
         if self._conn is not None:

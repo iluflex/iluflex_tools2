@@ -542,12 +542,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             pass
 
 
-    def _refresh_save_button_state(self) -> None:
-        try:
-            state = "normal" if any(k != "__baseline" for mac, d in self._edited_rows.items() for k in d.keys()) else "disabled"
-            self.salvarModuloBtn.configure(state=state)
-        except Exception:
-            pass
+
 
 
  
@@ -562,46 +557,39 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
 
     def _on_table_double_click(self, event):
-        """Edita in-place apenas 'Slave ID' e 'Nome'. Retorna 'break' p/ bloquear binds globais."""
+        """Edita apenas 'Slave ID' e 'Nome'. Retorna 'break' para parar outros binds."""
         try:
-            tree = getattr(event, "widget", None)
-            print(f"[Duplo Click na tabela] tree {tree}")
-            if tree is None or not hasattr(tree, "identify_column"):
-                tree = self.table.tree
-
-            # Garante que é célula
-            region = tree.identify_region(event.x, event.y)
-            print(f"[Duplo Click na tabela] region {region}")
+            # Se já existe editor aberto, comita antes de abrir outro (permite re-editar a mesma linha)
+            if getattr(self, "_cell_editor", None) is not None:
+                try:
+                    self._commit_cell_edit()
+                except Exception:
+                    self._cancel_cell_edit()
+            tree = getattr(event, "widget", None) or self.table.tree
+            region = getattr(tree, "identify_region", lambda x, y: tree.identify("region", x, y))(event.x, event.y)
             if region != "cell":
-                return  # deixa outros binds seguirem
-
+                return "break"
             row_iid = tree.identify_row(event.y)
-            col_token = tree.identify_column(event.x)  # ex.: "#1"
-            print(f"[Duplo Click na tabela] row_iid: {row_iid} col_token: {col_token}")
+            col_token = tree.identify_column(event.x)
             if not row_iid or not col_token:
-                return
-
-            # Resolve para o nome da coluna definido no Treeview
+                return "break"
             idx0 = int(col_token[1:]) - 1
-            columns = self._tree_columns()
+            columns = list(tree.cget("columns") or ())
             if idx0 < 0 or idx0 >= len(columns):
-                return
-            col_name = columns[idx0]  # aqui são exatamente as keys dadas em cols[...]["key"]
-            print(f"[Duplo Click na tabela] idx0: {idx0} columns: {columns}, col_name: {col_name}")
-
-            # Somente campos editáveis
+                return "break"
+            col_name = columns[idx0]  # exatamente as keys definidas
             if col_name not in ("Slave ID", "Nome"):
-                return
-
-            # Inicia edição e BLOQUEIA propagação (evita bind global da página conexão)
+                return "break"
             self._start_cell_edit(tree, row_iid, idx0, col_name)
             return "break"
         except Exception:
-            return  # deixa seguir caso algo dê errado
+            return "break"
 
 
+    # --- editor in-place simples e confiável (tk.Entry como filho do Treeview) ---
     def _start_cell_edit(self, tree, row_iid: str, col_idx: int, col_name: str) -> None:
-        print(f"[Start cell edit] row_iid: {row_iid} , col_idx: {col_idx} int, col_name: {col_name} ")
+        import tkinter as tk
+
         # Fecha editor anterior, se houver
         if self._cell_editor is not None:
             try:
@@ -611,8 +599,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                     self._cancel_cell_edit()
                 except Exception:
                     pass
-        
-        # Garante que a linha está visível e pega bbox
+
+        # Garante visibilidade e mede bbox
         try:
             tree.see(row_iid)
             x, y, w, h = tree.bbox(row_iid, f"#{col_idx+1}")
@@ -620,26 +608,18 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             return
         if not w or not h:
             return
-        print(f"[Start cell edit] x, y, w, h {x, y, w, h}")
-        # Converte para coordenadas do toplevel (absolutas -> relativas ao topo da janela)
-        tl = self.winfo_toplevel()
-        px = tree.winfo_rootx() + x - tl.winfo_rootx()
-        py = tree.winfo_rooty() + y - tl.winfo_rooty()
 
-        # Valor atual e MAC
         current_value = tree.set(row_iid, col_name)
         mac_value = tree.set(row_iid, "Mac Address")
-        print(f"[Start cell edit] mac_value {mac_value}")
 
-        # Baseline (primeira edição desse MAC)
+        # Baseline
         if mac_value and mac_value not in self._edited_rows:
-            baseline = {
-                "Slave ID": tree.set(row_iid, "Slave ID"),
-                "Nome": tree.set(row_iid, "Nome"),
+            self._edited_rows[mac_value] = {
+                "__baseline": {
+                    "Slave ID": tree.set(row_iid, "Slave ID"),
+                    "Nome": tree.set(row_iid, "Nome"),
+                }
             }
-            self._edited_rows[mac_value] = {"__baseline": baseline}
-
-        print(f"[Start cell edit] baseline: {baseline}")
 
         # tk.Entry funciona em qualquer tema; evita incompatibilidade de CTkEntry como filho de Tk widgets
         editor = tk.Entry(tree, relief="flat", borderwidth=1, highlightthickness=1)
@@ -666,7 +646,98 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         editor.bind("<KP_Enter>", lambda e: self._commit_cell_edit())
         editor.bind("<Escape>", lambda e: self._cancel_cell_edit())
         editor.bind("<FocusOut>", lambda e: self._commit_cell_edit())
- 
+
+
+    # --- commit/cancel + destaque visual + estado do botão Salvar ---
+    def _commit_cell_edit(self) -> None:
+        if not self._cell_editor or not self._cell_editor_info:
+            return
+        try:
+            editor = self._cell_editor
+            info = self._cell_editor_info
+            new_val = editor.get()
+            col_name = info["col_name"]
+            row_iid = info["iid"]
+            mac = info.get("mac")
+
+            if col_name == "Slave ID":
+                try:
+                    new_val = self._sanitize_slave_id(new_val)
+                except Exception:
+                    v = (new_val or "").strip()
+                    new_val = str(max(0, min(255, int(v)))) if v.isdigit() else ""
+                if new_val == "":
+                    # inválido: cancela e não marca edição
+                    self._cancel_cell_edit()
+                    return
+
+            # Aplica na UI
+            self.table.tree.set(row_iid, col_name, new_val)
+
+            # Atualiza estado por MAC
+            if mac:
+                # Atualiza cache
+                try:
+                    if mac in getattr(self, "_rows_by_mac", {}):
+                        self._rows_by_mac[mac][col_name] = new_val
+                except Exception:
+                    pass
+
+                # Baseline & diff
+                try:
+                    b = self._edited_rows.get(mac, {}).get("__baseline", {})
+                    cur_slave = self.table.tree.set(row_iid, "Slave ID")
+                    cur_nome = self.table.tree.set(row_iid, "Nome")
+                    changes = {}
+                    if cur_slave != b.get("Slave ID"):
+                        changes["Slave ID"] = cur_slave
+                    if cur_nome != b.get("Nome"):
+                        changes["Nome"] = cur_nome
+                    if changes:
+                        self._edited_rows.setdefault(mac, {"__baseline": b})
+                        # Limpa chaves anteriores (exceto baseline) e grava atuais
+                        for k in list(self._edited_rows[mac].keys()):
+                            if k != "__baseline":
+                                self._edited_rows[mac].pop(k, None)
+                        self._edited_rows[mac].update(changes)
+                    else:
+                        self._edited_rows.pop(mac, None)
+                except Exception:
+                    pass
+
+                # Destaque visual
+                try:
+                    self._update_row_edit_tag(mac)
+                except Exception:
+                    pass
+
+            # Encerra editor
+            try:
+                editor.destroy()
+            finally:
+                self._cell_editor = None
+                self._cell_editor_info = None
+
+            # Estado do botão Salvar
+            self._refresh_save_button_state()
+        except Exception:
+            try:
+                self._cancel_cell_edit()
+            except Exception:
+                pass
+
+
+    def _cancel_cell_edit(self) -> None:
+        try:
+            if self._cell_editor is not None:
+                self._cell_editor.destroy()
+        finally:
+            self._cell_editor = None
+            self._cell_editor_info = None
+
+
+
+
 
 
     def _sanitize_slave_id(self, value: str) -> str:
@@ -690,90 +761,89 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             return (mac or "").replace(":", "").replace("-", "").replace(".", "")
 
 
-    def _commit_cell_edit(self) -> None:
-        if not self._cell_editor or not self._cell_editor_info:
+
+    #------------------- atualização XXXX ------------------------
+        
+    def _ensure_edit_tag_style(self) -> None:
+        """Configura a tag 'edited' com destaque VERMELHO (linha inteira)."""
+        try:
+            t = self.table.tree
+            t.tag_configure("edited", background="#7f1d1d", foreground="#ffffff")
+        except Exception:
+            pass
+
+
+    def _update_row_edit_tag(self, mac: str) -> None:
+        self._ensure_edit_tag_style()
+        iid = None
+        try:
+            for _iid in self.table.tree.get_children(""):
+                if self.table.tree.set(_iid, "Mac Address") == mac:
+                    iid = _iid
+                    break
+        except Exception:
+            iid = None
+        if not iid:
             return
+        d = self._edited_rows.get(mac, {})
+        has_changes = any(k != "__baseline" for k in d.keys())
         try:
-            editor = self._cell_editor
-            info = self._cell_editor_info
-            new_val = editor.get()
-            col_name = info["col_name"]
-            row_iid = info["iid"]
-            mac = info.get("mac")
-
-            if col_name == "Slave ID":
-                new_val = self._sanitize_slave_id(new_val)
-                if new_val == "":
-                    # não aplica mudança inválida
-                    self._cancel_cell_edit()
-                    return
-
-            # Aplica na célula visual
-            self.table.tree.set(row_iid, col_name, new_val)
-
-            # Atualiza estado por MAC
-            if mac:
-                # Atualiza cache da página
-                try:
-                    if mac in self._rows_by_mac:
-                        self._rows_by_mac[mac][col_name] = new_val
-                except Exception:
-                    pass
-
-                # Atualiza conjunto de alterações vs baseline
-                try:
-                    b = self._edited_rows.get(mac, {}).get("__baseline", {})
-                    cur_slave = self.table.tree.set(row_iid, "Slave ID")
-                    cur_nome = self.table.tree.set(row_iid, "Nome")
-                    # Recria registro de mudanças limpo (sem __baseline)
-                    changes = {}
-                    if cur_slave != b.get("Slave ID"):
-                        changes["Slave ID"] = cur_slave
-                    if cur_nome != b.get("Nome"):
-                        changes["Nome"] = cur_nome
-                    if changes:
-                        self._edited_rows.setdefault(mac, {"__baseline": b})
-                        # Remove chaves anteriores (exceto baseline) e grava atuais
-                        for k in list(self._edited_rows[mac].keys()):
-                            if k != "__baseline":
-                                self._edited_rows[mac].pop(k, None)
-                        self._edited_rows[mac].update(changes)
-                    else:
-                        # Sem diferenças -> remove MAC do conjunto de edições
-                        self._edited_rows.pop(mac, None)
-                except Exception:
-                    pass
-
-            # Finaliza editor
-            try:
-                editor.destroy()
-            finally:
-                self._cell_editor = None
-                self._cell_editor_info = None
-            self._refresh_save_button_state()
+            tags = set(self.table.tree.item(iid, "tags") or [])
+            if has_changes:
+                tags.add("edited")
+            else:
+                tags.discard("edited")
+            self.table.tree.item(iid, tags=tuple(tags))
         except Exception:
-            try:
-                self._cancel_cell_edit()
-            except Exception:
-                pass
+            pass
 
 
-    def _cancel_cell_edit(self) -> None:
+    def _clear_all_edit_tags(self) -> None:
         try:
-            if self._cell_editor is not None:
-                self._cell_editor.destroy()
-        finally:
-            self._cell_editor = None
-            self._cell_editor_info = None
-
-
-    def _get_row_dict_from_iid(self, iid: str) -> dict:
-        """Retorna {col: valor} da linha pelo iid atual do Treeview."""
-        try:
-            vals = self.table.tree.item(iid, "values")
-            return {col: vals[i] for i, col in enumerate(self.table._all_cols)}
+            for iid in self.table.tree.get_children(""):
+                tags = set(self.table.tree.item(iid, "tags") or [])
+                if "edited" in tags:
+                    tags.discard("edited")
+                    self.table.tree.item(iid, tags=tuple(tags))
         except Exception:
-            return {}
+            pass
+
+
+    def _apply_save_button_red(self, active: bool) -> None:
+        """Muda a cor do botão Salvar para vermelho quando ativo; restaura quando inativo."""
+        try:
+            if active:
+                self.salvarModuloBtn.configure(fg_color="#b91c1c", hover_color="#dc2626", text_color="#ffffff")
+            else:
+                if getattr(self, "_salvar_default_colors", None):
+                    self.salvarModuloBtn.configure(**self._salvar_default_colors)
+        except Exception:
+            pass
+
+
+    def _refresh_save_button_state(self) -> None:
+        try:
+            has_changes = any(any(k != "__baseline" for k in d.keys()) for d in self._edited_rows.values())
+            if not hasattr(self, "_salvar_default_colors"):
+                try:
+                    self._salvar_default_colors = {
+                        "fg_color": self.salvarModuloBtn.cget("fg_color"),
+                        "hover_color": self.salvarModuloBtn.cget("hover_color"),
+                        "text_color": self.salvarModuloBtn.cget("text_color"),
+                    }
+                except Exception:
+                    self._salvar_default_colors = None
+            if has_changes:
+                self.salvarModuloBtn.configure(state="normal")
+                self._apply_save_button_red(True)
+            else:
+                self.salvarModuloBtn.configure(state="disabled")
+                self._apply_save_button_red(False)
+        except Exception:
+            pass
+
+
+
 
     # -------------------- COMANDOS --------------------
 
@@ -804,12 +874,15 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         para módulos já cadastrados, permitindo alterar parâmetros gravados. 
         Comando: SRF,15,5,<macAddress>,<slaveID>,<nome><cr>
         Ação: Obter a linha selecionada, obtem o mac do modulo, constroi comando, envia para modulo
+        Envia SRF,15,5,<mac>,<slave_id>,<nome> para CADA módulo com alterações.
         """
         try:
             if not self._edited_rows:
                 return
-            macs = [m for m in self._edited_rows.keys() if m]
-            for mac in macs:
+            changed_macs = [mac for mac, d in self._edited_rows.items() if any(k != "__baseline" for k in d.keys())]
+            if not changed_macs:
+                return
+            for mac in changed_macs:
                 safe_mac = self._mac_compact(mac)
                 if not safe_mac:
                     continue
@@ -834,7 +907,12 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 if callable(self._send):
                     self._send(cmd)
 
+            # Pós-salvamento
+            self._clear_all_edit_tags()
             self._edited_rows.clear()
             self._refresh_save_button_state()
         except Exception:
             pass
+
+
+ 

@@ -50,7 +50,7 @@ class MainApp(ctk.CTk):
         self.header = Header(self, conn=self.conn, on_toggle_collapse=self._toggle_sidebar_collapse)
         self.header.grid(row=0, column=0, columnspan=2, sticky="ew")
 
-        self.sidebar = Sidebar(self, on_nav=self.navigate, collapsed=False)
+        self.sidebar = Sidebar(self, on_nav=self.navigate, collapsed=True)
         self.sidebar.grid(row=1, column=0, sticky="nsw")
 
         self.content = ctk.CTkFrame(self, corner_radius=0)

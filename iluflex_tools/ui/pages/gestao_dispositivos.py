@@ -122,6 +122,15 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
         self.stopDiscoverBtn = ctk.CTkButton(bottom_frame,  text="Parar Busca", command=self._on_click_stop_discover)
         self.stopDiscoverBtn.grid(row=0, column=2, padx=6, pady=6)
+
+        self.sinalizarModuloBtn = ctk.CTkButton(bottom_frame,  text="Sinalizar Modulo", command=self._on_click_sinalizarModulo)
+        self.sinalizarModuloBtn.grid(row=0, column=3, padx=6, pady=6)
+
+        self.salvarModuloBtn = ctk.CTkButton(bottom_frame,  text="Salvar", command=self._on_click_salvarModulo)
+        self.salvarModuloBtn.grid(row=0, column=2, padx=6, pady=6)        
+
+        # Configurações da pagina
+
         self.stopDiscoverBtn.grid_remove()  # oculto inicialmente
 
         # Oculta colunas de detalhes
@@ -163,6 +172,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             pass
 
+        # Recurso para edição da tabela
+        self._init_editing_features()
 
 
     # ------------------------------------------------------------------
@@ -402,10 +413,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             pass
 
 
-
-
-
-
     def _update_discover_progress(self):
         remaining = self._discover_end_time - time.time()
         progress = 1.0 - max(remaining, 0) / float(self._discover_timeout)
@@ -439,36 +446,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception:
             pass
 
-
-    # ---- Tema ----
-    def on_theme_changed(self):
-        self._style_discover_progress()
-        if hasattr(self.table, "apply_style"):
-            try:
-                self.table.apply_style()
-            except Exception:
-                pass
-
-
-   # --------------------- Auto‑reconnect ---------------------
-    def _service_auto_enabled(self) -> bool:
-        """Inferir estado real do serviço (não há getter público)."""
-        try:
-            thr = getattr(self._conn, "_auto_thread", None)
-            ev = getattr(self._conn, "_auto_stop", None)
-            return bool(thr and getattr(thr, "is_alive", lambda: False)() and ev and not ev.is_set())
-        except Exception:
-            return False
-
-    def _sync_auto_switch_from_service(self) -> None:
-        try:
-            if self._service_auto_enabled():
-                self.auto_reconnect.select()
-            else:
-                self.auto_reconnect.deselect()
-        except Exception:
-            self.auto_reconnect.deselect()
-
     def _on_toggle_auto(self) -> None:
         enabled = bool(self.auto_reconnect.get())
         try:
@@ -480,6 +457,15 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             pass
 
 
+    # ---- Tema ----
+    def on_theme_changed(self):
+        self._style_discover_progress()
+        if hasattr(self.table, "apply_style"):
+            try:
+                self.table.apply_style()
+            except Exception:
+                pass
+
     #------------ Navegação para essa página ----------------
     def _maybe_autorefresh(self):
         try:
@@ -490,4 +476,312 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     def on_page_activated(self) -> None:
         """Chamar ao navegar para esta página para auto‑atualizar se conectado."""
-        self._maybe_autorefresh()
+        self._maybe_autorefresh()        
+        # refletir estado real do serviço de reconecção
+        try:
+            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
+                self.auto_reconnect.select()
+            else:
+                self.auto_reconnect.deselect()
+        except Exception:
+            self.auto_reconnect.deselect()
+
+
+
+
+    # --------------------------------------------------------
+    #  NOVOS COMANDOS PARA EDIÇÃO E SINALIZAÇÃO DOS MÓDULOS
+    # --------------------------------------------------------
+
+    def _init_editing_features(self) -> None:
+        """Inicializa estado de edição/seleção e faz os binds necessários."""
+        # Estado de edição por MAC: { mac: {"__baseline": {..}, "Slave ID": <novo>, "Nome": <novo>} }
+        self._edited_rows: dict[str, dict] = {}
+        # Editor in-place
+        self._cell_editor = None
+        self._cell_editor_info: dict | None = None
+
+        # Seleção atual (MAC)
+        self._selected_mac: str | None = None
+
+        # Estados iniciais dos botões
+        try:
+            self.salvarModuloBtn.configure(state="disabled")
+        except Exception:
+            pass
+        try:
+            self.sinalizarModuloBtn.configure(state="disabled")
+        except Exception:
+            pass
+
+        # Binds: seleção e duplo‑clique para edição
+        try:
+            self.table.tree.bind("<<TreeviewSelect>>", self._on_table_select, add="+")
+            self.table.tree.bind("<Double-1>", self._on_table_double_click, add="+")
+        except Exception:
+            pass
+
+
+    def _on_table_select(self, _evt=None) -> None:
+        """Atualiza MAC selecionado e habilita/desabilita o botão Sinalizar."""
+        try:
+            row = self.table.get_selected_row()
+        except Exception:
+            row = None
+        self._selected_mac = (row or {}).get("Mac Address") if row else None
+        self._refresh_signal_button_state()
+
+
+    def _refresh_signal_button_state(self) -> None:
+        try:
+            state = "normal" if self._selected_mac else "disabled"
+            self.sinalizarModuloBtn.configure(state=state)
+        except Exception:
+            pass
+
+
+    def _refresh_save_button_state(self) -> None:
+        try:
+            state = "normal" if any(k != "__baseline" for mac, d in self._edited_rows.items() for k in d.keys()) else "disabled"
+            self.salvarModuloBtn.configure(state=state)
+        except Exception:
+            pass
+
+
+    def _on_table_double_click(self, event) -> None:
+        """Permite editar in‑place apenas colunas: 'Slave ID' e 'Nome'."""
+        try:
+            tree = self.table.tree
+            row_iid = tree.identify_row(event.y)
+            col_id = tree.identify_column(event.x)  # ex.: "#1"
+            if not row_iid or not col_id:
+                return
+            col_idx = int(col_id[1:]) - 1
+            if col_idx < 0 or col_idx >= len(self.table._all_cols):
+                return
+            col_name = self.table._all_cols[col_idx]
+            if col_name not in ("Slave ID", "Nome"):
+                return  # campos fixos não editáveis
+            self._start_cell_edit(row_iid, col_idx, col_name)
+        except Exception:
+            pass
+
+
+    def _start_cell_edit(self, row_iid: str, col_idx: int, col_name: str) -> None:
+        tree = self.table.tree
+        # Fecha editor anterior, se houver
+        if self._cell_editor is not None:
+            try:
+                self._commit_cell_edit()
+            except Exception:
+                try:
+                    self._cancel_cell_edit()
+                except Exception:
+                    pass
+
+        # Bounding box da célula
+        try:
+            x, y, w, h = tree.bbox(row_iid, f"#{col_idx+1}")
+        except Exception:
+            return
+        if not w or not h:
+            return
+
+        # Valor atual e MAC
+        current_value = tree.set(row_iid, col_name)
+        mac_value = tree.set(row_iid, "Mac Address")
+
+        # Baseline (primeira edição desse MAC)
+        if mac_value and mac_value not in self._edited_rows:
+            baseline = {
+                "Slave ID": tree.set(row_iid, "Slave ID"),
+                "Nome": tree.set(row_iid, "Nome"),
+            }
+            self._edited_rows[mac_value] = {"__baseline": baseline}
+
+        # Editor (CTkEntry) posicionado sobre a célula
+        editor = ctk.CTkEntry(self.table)
+        editor.insert(0, str(current_value))
+        editor.select_range(0, "end")
+        editor.focus_set()
+        editor.place(x=x, y=y, width=w, height=h)
+
+        # Guarda contexto
+        self._cell_editor = editor
+        self._cell_editor_info = {
+            "iid": row_iid,
+            "col_idx": col_idx,
+            "col_name": col_name,
+            "mac": mac_value,
+            "old": current_value,
+        }
+
+        # Binds do editor
+        editor.bind("<Return>", lambda e: self._commit_cell_edit())
+        editor.bind("<Escape>", lambda e: self._cancel_cell_edit())
+        editor.bind("<FocusOut>", lambda e: self._commit_cell_edit())
+
+
+    def _sanitize_slave_id(self, value: str) -> str:
+        """Normaliza Slave ID. Mantém simples e defensivo."""
+        v = (value or "").strip()
+        if not v.isdigit():
+            return ""  # inválido -> ignora alteração
+        n = int(v)
+        if n < 0:
+            n = 0
+        if n > 255:
+            n = 255
+        return str(n)
+
+
+    def _commit_cell_edit(self) -> None:
+        if not self._cell_editor or not self._cell_editor_info:
+            return
+        try:
+            editor = self._cell_editor
+            info = self._cell_editor_info
+            new_val = editor.get()
+            col_name = info["col_name"]
+            row_iid = info["iid"]
+            mac = info.get("mac")
+
+            if col_name == "Slave ID":
+                new_val = self._sanitize_slave_id(new_val)
+                if new_val == "":
+                    # não aplica mudança inválida
+                    self._cancel_cell_edit()
+                    return
+
+            # Aplica na célula visual
+            self.table.tree.set(row_iid, col_name, new_val)
+
+            # Atualiza estado por MAC
+            if mac:
+                # Atualiza cache da página
+                try:
+                    if mac in self._rows_by_mac:
+                        self._rows_by_mac[mac][col_name] = new_val
+                except Exception:
+                    pass
+
+                # Atualiza conjunto de alterações vs baseline
+                try:
+                    b = self._edited_rows.get(mac, {}).get("__baseline", {})
+                    cur_slave = self.table.tree.set(row_iid, "Slave ID")
+                    cur_nome = self.table.tree.set(row_iid, "Nome")
+                    # Recria registro de mudanças limpo (sem __baseline)
+                    changes = {}
+                    if cur_slave != b.get("Slave ID"):
+                        changes["Slave ID"] = cur_slave
+                    if cur_nome != b.get("Nome"):
+                        changes["Nome"] = cur_nome
+                    if changes:
+                        self._edited_rows.setdefault(mac, {"__baseline": b})
+                        # Remove chaves anteriores (exceto baseline) e grava atuais
+                        for k in list(self._edited_rows[mac].keys()):
+                            if k != "__baseline":
+                                self._edited_rows[mac].pop(k, None)
+                        self._edited_rows[mac].update(changes)
+                    else:
+                        # Sem diferenças -> remove MAC do conjunto de edições
+                        self._edited_rows.pop(mac, None)
+                except Exception:
+                    pass
+
+            # Finaliza editor
+            try:
+                editor.destroy()
+            finally:
+                self._cell_editor = None
+                self._cell_editor_info = None
+            self._refresh_save_button_state()
+        except Exception:
+            try:
+                self._cancel_cell_edit()
+            except Exception:
+                pass
+
+
+    def _cancel_cell_edit(self) -> None:
+        try:
+            if self._cell_editor is not None:
+                self._cell_editor.destroy()
+        finally:
+            self._cell_editor = None
+            self._cell_editor_info = None
+
+
+    def _get_row_dict_from_iid(self, iid: str) -> dict:
+        """Retorna {col: valor} da linha pelo iid atual do Treeview."""
+        try:
+            vals = self.table.tree.item(iid, "values")
+            return {col: vals[i] for i, col in enumerate(self.table._all_cols)}
+        except Exception:
+            return {}
+
+
+    # -------------------- COMANDOS --------------------
+
+    def _on_click_sinalizarModulo(self) -> None:
+        """ 
+        Obtem a linha selecionada, obtem o mac do modulo, constroi comando, envia para modulo ocomando 
+        para identificar ou localizar módulo slave da rede. Irá piscar teclado e ou led. 
+        O comando usa Mac Address do módulo pois podem ter módulos com mesmo slave_id.
+        Comando: SRF,15,8,<Mac Address><cr>
+        Ação: Obtem a linha selecionada, obtem o mac do modulo, constroi comando, envia para modulo
+        """
+        try:
+            mac = self._selected_mac
+            mac = self._mac_compact(mac)
+            if not mac:
+                return
+            cmd = f"SRF,15,8,{mac}\r"
+            if callable(self._send):
+                self._send(cmd)
+        except Exception:
+            pass
+
+
+    def _on_click_salvarModulo(self) -> None:
+        """
+        Este comando é válido tanto na rede mesh quanto na rede 485 para efetivamente cadastrar 
+        novos módulos na rede mesh e na rede 485. Esse comando é aceito tanto para módulos novos quanto 
+        para módulos já cadastrados, permitindo alterar parâmetros gravados. 
+        Comando: SRF,15,5,<macAddress>,<slaveID>,<nome><cr>
+        Ação: Obter a linha selecionada, obtem o mac do modulo, constroi comando, envia para modulo
+        """
+        try:
+            if not self._edited_rows:
+                return
+            macs = [m for m in self._edited_rows.keys() if m]
+            for mac in macs:
+                safe_mac = self._mac_compact(mac)
+                if not safe_mac:
+                    continue
+                iid_match = None
+                try:
+                    for iid in self.table.tree.get_children(""):
+                        if self.table.tree.set(iid, "Mac Address") == mac:
+                            iid_match = iid
+                            break
+                except Exception:
+                    iid_match = None
+
+                if iid_match:
+                    slave_id = self.table.tree.set(iid_match, "Slave ID")
+                    nome = self.table.tree.set(iid_match, "Nome")
+                else:
+                    row = self._rows_by_mac.get(mac, {})
+                    slave_id = str(row.get("Slave ID", ""))
+                    nome = str(row.get("Nome", ""))
+
+                cmd = f"SRF,15,5,{safe_mac},{slave_id},{nome}
+    "
+                if callable(self._send):
+                    self._send(cmd)
+
+            self._edited_rows.clear()
+            self._refresh_save_button_state()
+        except Exception:
+            pass

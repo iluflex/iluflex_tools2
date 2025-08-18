@@ -11,6 +11,7 @@ import customtkinter as ctk
 from collections import Counter
 from typing import Dict, List
 import tkinter as tk  # local, para não mexer nos imports do arquivo
+from tkinter import font as tkfont
 
 from iluflex_tools.widgets.column_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService, parse_rrf10_lines
@@ -233,54 +234,56 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # Cores por regra
     # ------------------------------------------------------------------
     def _apply_row_colors(self, last_mac: str | None):
-        # Conta duplicidades de slave_id
-        counts = Counter(r.get("Slave ID") for r in self._dataset if r.get("Slave ID") != "")
-
-        # Acessa Treeview interno (ColumnToggleTree deve expor como .tree ou .tv)
+        """Só gerencia TAGS (status). Cores moram no ColumnToggleTree.apply_style()."""
+        counts = Counter(
+            str(r.get("Slave ID")).strip()
+            for r in self._dataset
+            if r.get("Slave ID") not in (None, "")
+        )
         tv = getattr(self.table, "tree", getattr(self.table, "tv", None))
+        print(f"[_apply_row_colors] counts={counts} last_mac={last_mac}")
         if tv is None:
-            return  # sem como aplicar cor, não quebra
-
-        # Define tags (não falhar se já existir)
-        try:
-            tv.tag_configure("last", background="#939393")       # cinza
-            tv.tag_configure("dup_sid", background="#FAE467")     # amarelo claro
-            tv.tag_configure("uniq_sid", background="#7FD37F")    # verde claro
-        except Exception:
-            pass
-
-        # Descobre índices das colunas
-        headers = []
-        try:
-            headers = [h for (h, _w) in getattr(self.table, "columns", [])]
-        except Exception:
-            pass
-        if not headers:
-            headers = ["Slave ID", "Mac Address"]  # suposição segura
-        try:
-            idx_sid = headers.index("Slave ID")
-            idx_mac = headers.index("Mac Address")
-        except ValueError:
             return
-
-        # Limpa tags e reaplica
+        # remove somente nossas tags de status (preserva zebra/hover/seleção)
+        OUR = {"last", "dup_sid", "sid_zero", "uniq_sid"}
+        for iid in tv.get_children(""):
+            old = list(tv.item(iid, "tags") or [])
+            tv.item(iid, tags=tuple(t for t in old if t not in OUR))
+        # aplica status
+        mac_idx = None
+        try:
+            mac_idx = self.table._all_cols.index("Mac Address")
+        except Exception as e: print(e); pass
         for iid in tv.get_children(""):
             try:
                 vals = tv.item(iid, "values")
-                sid = vals[idx_sid]
-                mac = str(vals[idx_mac]).lower()
-                tags = []
-                if last_mac and mac == last_mac:
-                    tags.append("last")  # última mensagem tem prioridade visual
-                # grupo por slave_id
-                n = counts.get(sid, 0)
-                if n > 1:
-                    tags.append("dup_sid")
-                else:
-                    tags.append("uniq_sid")
-                tv.item(iid, tags=tuple(tags))
-            except Exception:
-                continue
+                mac = (vals[mac_idx] if mac_idx is not None else None) if vals else None
+
+                # Slave ID em string (facilita comparação)
+                try:
+                    slaveID = vals[self.table._all_cols.index("Slave ID")]
+                    slaveID = str(slaveID).strip() if slaveID is not None else None
+                except Exception:
+                    slaveID = None
+                if mac and last_mac and mac == last_mac:
+                    # Último recebido
+                    try: self.table.append_tag_last(iid, "last")
+                    except Exception as e: print(e); pass
+                print(f"[page gestao_disp _apply_row_colors] iid: {iid} slaveID: {slaveID}")
+                if slaveID:
+                    if slaveID == "0":
+                        print(f"[page gestao_disp _apply_row_colors] iid: {iid} slaveID: {slaveID} aply tag sid_zero")
+                        try: self.table.append_tag_last(iid, "sid_zero")
+                        except Exception as e: print(e); pass
+                    elif counts.get(slaveID, 0) > 1:
+                        try: self.table.append_tag_last(iid, "dup_sid")
+                        except Exception as e: print(e); pass
+                    else:
+                        try: self.table.append_tag_last(iid, "uniq_sid")
+                        except Exception as e: print(e); pass
+            except Exception as e:
+                 print("[page gestao_disp _apply_row_colors] Exception:", e)
+                 pass
 
     # ------------------------------------------------------------------
     # Eventos de conexão
@@ -323,7 +326,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         try:
             if getattr(self, "_discover_after", None):
                 try: self.after_cancel(self._discover_after)
-                except Exception: pass
+                except Exception as e: print(e); pass
                 self._discover_after = None
             self.discover_progress.set(0)
             self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
@@ -359,6 +362,9 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         """Solicita a lista completa e reseta realces."""
         print("atualizar lista")
         try:
+            # limpa TODAS as tags (hover/edited/dup_sid/uniq_sid/last/...)
+            if hasattr(self.table, "clear_all_tags"):
+                self.table.clear_all_tags()
             self._rows_by_mac.clear()
             self._dataset.clear()
             self._last_mac = None
@@ -640,6 +646,19 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             "mac": mac_value,
             "old": current_value,
         }
+        # fonte igual à da tabela
+        try:
+            base = tkfont.nametofont("TkDefaultFont")
+            family = base.cget("family")
+            size = getattr(self.table, "_font_size", 12)   # usa o tamanho da tabela
+            editor.configure(font=tkfont.Font(family=family, size=size))
+        except Exception:
+            pass
+
+        # alinhamento conforme âncora da coluna
+        anchor = getattr(self.table, "_col_anchor", {}).get(col_name, "center")
+        justify = {"w": "left", "center": "center", "e": "right", "left": "left", "right": "right"}.get(anchor, "center")
+        editor.configure(justify=justify)
 
         # Binds do editor
         editor.bind("<Return>", lambda e: self._commit_cell_edit())
@@ -665,8 +684,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 try:
                     new_val = self._sanitize_slave_id(new_val)
                 except Exception:
-                    v = (new_val or "").strip()
-                    new_val = str(max(0, min(255, int(v)))) if v.isdigit() else ""
+                    new_val = 0
                 if new_val == "":
                     # inválido: cancela e não marca edição
                     self._cancel_cell_edit()
@@ -768,8 +786,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         n = int(v)
         if n < 0:
             n = 0
-        if n > 255:
-            n = 255
+        if n > 127:
+            n = 127
         return str(n)
 
 
@@ -793,14 +811,16 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         d = self._edited_rows.get(mac, {})
         has_changes = any(k != "__baseline" for k in d.keys())
         try:
-            tags = set(self.table.tree.item(iid, "tags") or [])
+            tags = list(self.table.tree.item(iid, "tags") or [])
+            # remove instâncias anteriores mantendo ordem
+            tags = [t for t in tags if t != "edited"]
             if has_changes:
-                tags.add("edited")
-            else:
-                tags.discard("edited")
+                tags.append("edited")        # “edited” por último -> prioridade máxima
             self.table.tree.item(iid, tags=tuple(tags))
         except Exception:
             pass
+
+
 
 
     def _clear_all_edit_tags(self) -> None:

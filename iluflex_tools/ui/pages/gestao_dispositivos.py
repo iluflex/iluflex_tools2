@@ -621,13 +621,13 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 }
             }
 
-        # tk.Entry funciona em qualquer tema; evita incompatibilidade de CTkEntry como filho de Tk widgets
+        # tk.Entry é compatível com todos os temas
         editor = tk.Entry(tree, relief="flat", borderwidth=1, highlightthickness=1)
         editor.insert(0, str(current_value))
         editor.select_range(0, "end")
         editor.place(x=x, y=y, width=w, height=h)
 
-        # Foco confiável (após pipeline de eventos do duplo clique)
+        # Foco confiável (após pipeline do duplo clique)
         tree.after_idle(editor.focus_force)
 
         # Guarda contexto
@@ -646,6 +646,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         editor.bind("<KP_Enter>", lambda e: self._commit_cell_edit())
         editor.bind("<Escape>", lambda e: self._cancel_cell_edit())
         editor.bind("<FocusOut>", lambda e: self._commit_cell_edit())
+        
 
 
     # --- commit/cancel + destaque visual + estado do botão Salvar ---
@@ -726,7 +727,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             except Exception:
                 pass
 
-
     def _cancel_cell_edit(self) -> None:
         try:
             if self._cell_editor is not None:
@@ -735,6 +735,26 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             self._cell_editor = None
             self._cell_editor_info = None
 
+
+    def _ensure_edit_tag_style(self) -> None:
+        """Configura a tag 'edited' com destaque VERMELHO (linha inteira)."""
+        try:
+            t = self.table.tree
+            t.tag_configure("edited", background="#7f1d1d", foreground="#ffffff")
+        except Exception:
+            pass
+
+
+    def _row_iid_by_mac(self, mac: str | None):
+        if not mac:
+            return None
+        try:
+            for iid in self.table.tree.get_children(""):
+                if self.table.tree.set(iid, "Mac Address") == mac:
+                    return iid
+        except Exception:
+            return None
+        return None
 
 
 
@@ -764,25 +784,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     #------------------- atualização XXXX ------------------------
         
-    def _ensure_edit_tag_style(self) -> None:
-        """Configura a tag 'edited' com destaque VERMELHO (linha inteira)."""
-        try:
-            t = self.table.tree
-            t.tag_configure("edited", background="#7f1d1d", foreground="#ffffff")
-        except Exception:
-            pass
-
 
     def _update_row_edit_tag(self, mac: str) -> None:
         self._ensure_edit_tag_style()
-        iid = None
-        try:
-            for _iid in self.table.tree.get_children(""):
-                if self.table.tree.set(_iid, "Mac Address") == mac:
-                    iid = _iid
-                    break
-        except Exception:
-            iid = None
+        iid = self._row_iid_by_mac(mac)
         if not iid:
             return
         d = self._edited_rows.get(mac, {})
@@ -845,6 +850,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
 
 
+
     # -------------------- COMANDOS --------------------
 
     def _on_click_sinalizarModulo(self) -> None:
@@ -876,9 +882,12 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         Ação: Obter a linha selecionada, obtem o mac do modulo, constroi comando, envia para modulo
         Envia SRF,15,5,<mac>,<slave_id>,<nome> para CADA módulo com alterações.
         """
+    def _on_click_salvarModulo(self) -> None:
+        """Envia SRF,15,5,<mac>,<slave_id>,<nome> para CADA módulo com alterações."""
         try:
             if not self._edited_rows:
                 return
+            # Só MACs com mudanças além do baseline
             changed_macs = [mac for mac, d in self._edited_rows.items() if any(k != "__baseline" for k in d.keys())]
             if not changed_macs:
                 return
@@ -913,6 +922,9 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             self._refresh_save_button_state()
         except Exception:
             pass
+
+
+
 
 
  

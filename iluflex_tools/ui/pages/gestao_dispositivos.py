@@ -234,56 +234,54 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # Cores por regra
     # ------------------------------------------------------------------
     def _apply_row_colors(self, last_mac: str | None):
-        """Só gerencia TAGS (status). Cores moram no ColumnToggleTree.apply_style()."""
-        counts = Counter(
-            str(r.get("Slave ID")).strip()
-            for r in self._dataset
-            if r.get("Slave ID") not in (None, "")
-        )
+        # Conta duplicidades de slave_id
+        counts = Counter(r.get("Slave ID") for r in self._dataset if r.get("Slave ID") != "")
+
+        # Acessa Treeview interno (ColumnToggleTree deve expor como .tree ou .tv)
         tv = getattr(self.table, "tree", getattr(self.table, "tv", None))
-        print(f"[_apply_row_colors] counts={counts} last_mac={last_mac}")
         if tv is None:
-            return
-        # remove somente nossas tags de status (preserva zebra/hover/seleção)
-        OUR = {"last", "dup_sid", "sid_zero", "uniq_sid"}
-        for iid in tv.get_children(""):
-            old = list(tv.item(iid, "tags") or [])
-            tv.item(iid, tags=tuple(t for t in old if t not in OUR))
-        # aplica status
-        mac_idx = None
+            return  # sem como aplicar cor, não quebra
+
+        # Define tags (não falhar se já existir)
         try:
-            mac_idx = self.table._all_cols.index("Mac Address")
-        except Exception as e: print(e); pass
+            tv.tag_configure("last", background="#939393")       # cinza
+            tv.tag_configure("dup_sid", background="#FAE467")     # amarelo claro
+            tv.tag_configure("uniq_sid", background="#7FD37F")    # verde claro
+        except Exception:
+            pass
+
+        # Descobre índices das colunas
+        headers = []
+        try:
+            headers = [h for (h, _w) in getattr(self.table, "columns", [])]
+        except Exception:
+            pass
+        if not headers:
+            headers = ["Slave ID", "Mac Address"]  # suposição segura
+        try:
+            idx_sid = headers.index("Slave ID")
+            idx_mac = headers.index("Mac Address")
+        except ValueError:
+            return
+
+        # Limpa tags e reaplica
         for iid in tv.get_children(""):
             try:
                 vals = tv.item(iid, "values")
-                mac = (vals[mac_idx] if mac_idx is not None else None) if vals else None
-
-                # Slave ID em string (facilita comparação)
-                try:
-                    slaveID = vals[self.table._all_cols.index("Slave ID")]
-                    slaveID = str(slaveID).strip() if slaveID is not None else None
-                except Exception:
-                    slaveID = None
-                if mac and last_mac and mac == last_mac:
-                    # Último recebido
-                    try: self.table.append_tag_last(iid, "last")
-                    except Exception as e: print(e); pass
-                print(f"[page gestao_disp _apply_row_colors] iid: {iid} slaveID: {slaveID}")
-                if slaveID:
-                    if slaveID == "0":
-                        print(f"[page gestao_disp _apply_row_colors] iid: {iid} slaveID: {slaveID} aply tag sid_zero")
-                        try: self.table.append_tag_last(iid, "sid_zero")
-                        except Exception as e: print(e); pass
-                    elif counts.get(slaveID, 0) > 1:
-                        try: self.table.append_tag_last(iid, "dup_sid")
-                        except Exception as e: print(e); pass
-                    else:
-                        try: self.table.append_tag_last(iid, "uniq_sid")
-                        except Exception as e: print(e); pass
-            except Exception as e:
-                 print("[page gestao_disp _apply_row_colors] Exception:", e)
-                 pass
+                sid = vals[idx_sid]
+                mac = str(vals[idx_mac]).lower()
+                tags = []
+                if last_mac and mac == last_mac:
+                    tags.append("last")  # última mensagem tem prioridade visual
+                # grupo por slave_id
+                n = counts.get(sid, 0)
+                if n > 1:
+                    tags.append("dup_sid")
+                else:
+                    tags.append("uniq_sid")
+                tv.item(iid, tags=tuple(tags))
+            except Exception:
+                continue
 
     # ------------------------------------------------------------------
     # Eventos de conexão
@@ -811,16 +809,14 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         d = self._edited_rows.get(mac, {})
         has_changes = any(k != "__baseline" for k in d.keys())
         try:
-            tags = list(self.table.tree.item(iid, "tags") or [])
-            # remove instâncias anteriores mantendo ordem
-            tags = [t for t in tags if t != "edited"]
+            tags = set(self.table.tree.item(iid, "tags") or [])
             if has_changes:
-                tags.append("edited")        # “edited” por último -> prioridade máxima
+                tags.add("edited")
+            else:
+                tags.discard("edited")
             self.table.tree.item(iid, tags=tuple(tags))
         except Exception:
             pass
-
-
 
 
     def _clear_all_edit_tags(self) -> None:

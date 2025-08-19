@@ -237,21 +237,11 @@ class ColumnToggleTree(ctk.CTkFrame):
             fb_hd["font"] = head_font
         self._style.configure("Treeview.Heading", **fb_hd)
 
-        # tags (hover/zebra + status)
+        # tags (hover/zebra)
         try:
             self.tree.tag_configure("hover", background=pal["row_hover_bg"], foreground=pal["fg"])  # feedback visual rápido
-            self.tree.tag_configure("odd", background=pal["odd_bg"], foreground=pal["fg"])          # zebra
-            self.tree.tag_configure("even", background=pal["even_bg"], foreground=pal["fg"])        # zebra
-            # ---- status (cores centralizadas no widget) ----
-            self.tree.tag_configure("edited",   background="#7f1d1d", foreground="#ffffff")
-            self.tree.tag_configure("last",     background="#939393", foreground=pal["fg"])
-            self.tree.tag_configure("dup_sid",  background="#FAE467", foreground="#111111")
-            self.tree.tag_configure("sid_zero", background="#FAE467", foreground="#111111")
-            self.tree.tag_configure("uniq_sid", background="#D9F8D9", foreground="#111111")
-
-            # (opcional, mas recomendo) não deixe __basefont__ definir cor de fundo
-            self.tree.tag_configure("__basefont__", background="", foreground="")
-
+            self.tree.tag_configure("odd", background=pal["odd_bg"], foreground=pal["fg"])         # zebra
+            self.tree.tag_configure("even", background=pal["even_bg"], foreground=pal["fg"])       # zebra
         except Exception:
             pass
 
@@ -279,13 +269,10 @@ class ColumnToggleTree(ctk.CTkFrame):
         if self._hover_iid == iid:
             return
         self._clear_hover()
-        if iid in set(tv.selection()):
+        if iid in set(tv.selection()):  # não sobrepor seleção
             return
-        tags = list(tv.item(iid, "tags") or [])
-        # hover com prioridade BAIXA: deixe no início (status ficam por último)
-        if "hover" in tags:
-            tags.remove("hover")
-        tags.insert(0, "hover")
+        tags = set(tv.item(iid, "tags") or ())
+        tags.add("hover")
         tv.item(iid, tags=tuple(tags))
         self._hover_iid = iid
 
@@ -297,9 +284,9 @@ class ColumnToggleTree(ctk.CTkFrame):
             return
         tv = self.tree
         try:
-            tags = list(tv.item(self._hover_iid, "tags") or [])
+            tags = set(tv.item(self._hover_iid, "tags") or ())
             if "hover" in tags:
-                tags = [t for t in tags if t != "hover"]
+                tags.remove("hover")
                 tv.item(self._hover_iid, tags=tuple(tags))
         finally:
             self._hover_iid = None
@@ -335,7 +322,8 @@ class ColumnToggleTree(ctk.CTkFrame):
         else:
             self._apply_hide(name)
         # refaz zebra
-        self._reapply_zebra_preserving()
+        for i, iid in enumerate(self.tree.get_children("")):
+            self.tree.item(iid, tags=(("even" if i % 2 == 0 else "odd"),))
 
     # ---------- API de dados ----------
     def set_rows(self, rows):
@@ -409,51 +397,14 @@ class ColumnToggleTree(ctk.CTkFrame):
         children.sort(key=_key, reverse=reverse)
         for i, iid in enumerate(children):
             self.tree.move(iid, "", i)
-        self._reapply_zebra_preserving()
+        for i, iid in enumerate(self.tree.get_children("")):
+            self.tree.item(iid, tags=(("even" if i % 2 == 0 else "odd"),))
         if toggle:
             self._auto_sort_asc = not self._auto_sort_asc
 
     def _auto_sort_if_needed(self) -> None:
         if getattr(self, "_auto_sort_col", None):
             self._sort_by(self._auto_sort_col, toggle=False)
-
-
-
-    # ---------- helpers de tags/zebra ----------
-    def _reapply_zebra_preserving(self) -> None:
-        """Reaplica zebra sem destruir tags de status (edited/dup_sid/sid_zero/uniq_sid/last/...)."""
-        for i, iid in enumerate(self.tree.get_children("")):
-            tags = list(self.tree.item(iid, "tags") or [])
-            tags = [t for t in tags if t not in ("odd", "even")]
-            tags.insert(0, "even" if i % 2 == 0 else "odd")
-            self.tree.item(iid, tags=tuple(tags))
-
-    # ---------- API para páginas ----------
-    def clear_all_tags(self) -> None:
-        """Remove TODAS as tags e reaplica apenas a zebra."""
-        print(f"[append_tag_last] clear_all_tags")
-        for i, iid in enumerate(self.tree.get_children("")):
-            self.tree.item(iid, tags=())
-        self._reapply_zebra_preserving()
-
-    def remove_tag_from_all(self, tag: str) -> None:
-        """Remove uma tag específica de todas as linhas (ex.: 'edited' após Salvar)."""
-        print(f"[append_tag_last] remove_tag_from_all {tag}")
-        for iid in self.tree.get_children(""):
-            tags = [t for t in (self.tree.item(iid, "tags") or []) if t != tag]
-            self.tree.item(iid, tags=tuple(tags))
-
-    def append_tag_last(self, iid: str, tag: str) -> None:
-        """Garante que `tag` seja a última (maior prioridade visual)."""
-        tags = list(self.tree.item(iid, "tags") or [])
-        tags = [t for t in tags if t != tag]
-        print(f"[append_tag_last] BEFORE tags={tags} iid={iid} add={tag}")
-        tags.append(tag)
-        self.tree.item(iid, tags=tuple(tags))
-        # 🔎 CONFIRMAÇÃO: lê de volta do widget
-        after = list(self.tree.item(iid, "tags") or [])
-        print(f"[append_tag_last]  AFTER tags={after} iid={iid}")
-
             
 
 """

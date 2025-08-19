@@ -14,20 +14,20 @@ import customtkinter as ctk
 # =============================================================================
 _THEME_COLORS: dict[str, dict[str, str]] = {
     "light": {
-        "bg": "#ffffff",
+        "bg": "#7A7A7A",
         "fg": "#111111",
         # Grid (borda, luz, sombra)
         "grid_border": "#d0d0d0",
         "grid_light": "#e6e6e6",
         "grid_dark": "#c0c0c0",
         # Cabeçalho (um pouco mais cinza que o corpo)
-        "header_bg": "#e5e5e5",
+        "header_bg": "#A8A8A8",
         "header_hover_bg": "#d9d9d9",
         # Hover de linha
-        "row_hover_bg": "#eef6ff",
+        "row_hover_bg": "#DAEBFF",
         # Zebra
         "odd_bg": "#ffffff",
-        "even_bg": "#fafafa",
+        "even_bg": "#E5E2E2",
         # Seleção
         "sel_bg": "#3b82f6",
         "sel_fg": "#ffffff",
@@ -188,7 +188,7 @@ class ColumnToggleTree(ctk.CTkFrame):
             fsize = int(getattr(self, "_font_size", 10))
             row_font = tkfont.Font(family=family, size=fsize)
             head_font = tkfont.Font(family=family, size=fsize, weight="bold")
-            row_h = max(14, row_font.metrics("linespace") + 2)
+            row_h = max(14, row_font.metrics("linespace") + 4)
         except Exception:
             row_font = None
             head_font = None
@@ -203,7 +203,7 @@ class ColumnToggleTree(ctk.CTkFrame):
             bordercolor=pal["grid_border"],
             lightcolor=pal["grid_light"],
             darkcolor=pal["grid_dark"],
-            borderwidth=1,
+            borderwidth=2,
         )
         if row_font is not None:
             tv_kwargs["font"] = row_font
@@ -228,7 +228,7 @@ class ColumnToggleTree(ctk.CTkFrame):
         self._style.configure(self._style_hd, **hd_kwargs)
         self._style.map(
             self._style_hd,
-            background=[("active", pal["header_hover_bg"])],
+            background=[("active", pal["header_bg"])],
             relief=[("pressed", "flat"), ("!pressed", "flat")],
         )
         # fallback no estilo padrão
@@ -242,6 +242,12 @@ class ColumnToggleTree(ctk.CTkFrame):
             self.tree.tag_configure("hover", background=pal["row_hover_bg"], foreground=pal["fg"])  # feedback visual rápido
             self.tree.tag_configure("odd", background=pal["odd_bg"], foreground=pal["fg"])         # zebra
             self.tree.tag_configure("even", background=pal["even_bg"], foreground=pal["fg"])       # zebra
+            # ---- STATUS (cores de negócio) ----
+            self.tree.tag_configure("edited",   background="#7f1d1d", foreground="#ffffff")
+            self.tree.tag_configure("last",     background="#939393", foreground=pal["fg"])
+            self.tree.tag_configure("dup_sid",  background="#FAE467", foreground="#111111")
+            self.tree.tag_configure("sid_zero", background="#FAE467", foreground="#111111")
+            self.tree.tag_configure("uniq_sid", background="#89E889", foreground="#111111")
         except Exception:
             pass
 

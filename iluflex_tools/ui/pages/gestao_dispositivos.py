@@ -89,10 +89,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             {"key": "Nome", "width": 220},
             {"key": "FW", "width": 70},
             {"key": "HW", "width": 70},
-            {"key": "Conectado a", "width": 170},
-            {"key": "Sinal (dB)", "width": 90},
+            {"key": "Conectado a", "width": 150},
+            {"key": "Sinal (dB)", "width": 70},
         ]
-        self.table = ColumnToggleTree(self, columns=[(c["key"], c["width"]) for c in cols], height=16)
+        self.table = ColumnToggleTree(self, columns=[(c["key"], c["width"]) for c in cols], height=20)
         self.table.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -234,21 +234,18 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # Cores por regra
     # ------------------------------------------------------------------
     def _apply_row_colors(self, last_mac: str | None):
-        # Conta duplicidades de slave_id
-        counts = Counter(r.get("Slave ID") for r in self._dataset if r.get("Slave ID") != "")
 
         # Acessa Treeview interno (ColumnToggleTree deve expor como .tree ou .tv)
         tv = getattr(self.table, "tree", getattr(self.table, "tv", None))
         if tv is None:
             return  # sem como aplicar cor, não quebra
-
-        # Define tags (não falhar se já existir)
-        try:
-            tv.tag_configure("last", background="#939393")       # cinza
-            tv.tag_configure("dup_sid", background="#FAE467")     # amarelo claro
-            tv.tag_configure("uniq_sid", background="#7FD37F")    # verde claro
-        except Exception:
-            pass
+        
+        def sid_str(x):
+            s = str(x).strip()
+            return s if s != "" else None
+        
+        # Conta duplicidades de slave_id
+        counts = Counter(s for s in (sid_str(r.get("Slave ID")) for r in self._dataset) if s is not None)
 
         # Descobre índices das colunas
         headers = []
@@ -268,17 +265,20 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         for iid in tv.get_children(""):
             try:
                 vals = tv.item(iid, "values")
-                sid = vals[idx_sid]
+                sid = sid_str(vals[idx_sid])
                 mac = str(vals[idx_mac]).lower()
+                n = counts.get(sid, 0)
+
                 tags = []
                 if last_mac and mac == last_mac:
                     tags.append("last")  # última mensagem tem prioridade visual
-                # grupo por slave_id
-                n = counts.get(sid, 0)
-                if n > 1:
+                elif int(sid) == 0 : 
+                    tags.append("sid_zero")
+                elif n > 1:
                     tags.append("dup_sid")
                 else:
                     tags.append("uniq_sid")
+                print(f"[gestao dispositivos._apply_row_colors] tags={tags} n = {n}")
                 tv.item(iid, tags=tuple(tags))
             except Exception:
                 continue

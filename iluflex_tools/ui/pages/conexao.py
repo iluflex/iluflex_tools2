@@ -1,6 +1,6 @@
 import threading
 import customtkinter as ctk
-from iluflex_tools.widgets.column_tree import ColumnToggleTree
+from iluflex_tools.widgets.table_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService
 from iluflex_tools.widgets.status_led import StatusLed
 
@@ -28,7 +28,7 @@ class ConexaoPage(ctk.CTkFrame):
         self.grid_rowconfigure(3, weight=1)
 
         ctk.CTkLabel(self, text="Conexão de Rede", font=ctk.CTkFont(size=18, weight="bold")).grid(
-            row=0, column=0, columnspan=3, pady=(10, 12), sticky="w"
+            row=0, column=0, columnspan=3, padx=10, pady=(10, 12), sticky="w"
         )
 
         conn_frame = ctk.CTkFrame(self)

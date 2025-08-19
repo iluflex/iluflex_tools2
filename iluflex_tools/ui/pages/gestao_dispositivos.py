@@ -13,7 +13,7 @@ from typing import Dict, List
 import tkinter as tk  # local, para não mexer nos imports do arquivo
 from tkinter import font as tkfont
 
-from iluflex_tools.widgets.column_tree import ColumnToggleTree
+from iluflex_tools.widgets.table_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService, parse_rrf10_lines
 from iluflex_tools.core.settings import load_settings, save_settings
 import time
@@ -59,19 +59,19 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     def _build(self):
         # Barra
-        bar = ctk.CTkFrame(self)
-        bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
-        bar.grid_columnconfigure(9, weight=1)
+        #bar = ctk.CTkFrame(self)
+        #bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+        #bar.grid_columnconfigure(9, weight=1)
 
-        ctk.CTkLabel(
-            bar,
-            text="Gestão de Dispositivos",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).pack(side="left", padx=(4, 12))
+        self.pagetitle = ctk.CTkLabel(self, text="Gestão de Dispositivos", font=ctk.CTkFont(size=16, weight="bold"))
+        self.pagetitle.grid(row=0, column=0, padx=12, pady=6, sticky='w')
+                                  
+        #).pack(side="left", padx=(4, 12))
 
         
-        self.auto_reconnect = ctk.CTkSwitch(bar, text="Auto reconectar", command=self._on_toggle_auto_reconnect)
-        self.auto_reconnect.pack(side="right", padx=6)
+        self.auto_reconnect = ctk.CTkSwitch(self, text="Auto reconectar", command=self._on_toggle_auto_reconnect)
+        self.auto_reconnect.grid(row=0, column=0, padx=12, pady=6, sticky='e')
+        #self.auto_reconnect.pack(side="right", padx=6)
         # refletir estado real do serviço
         try:
             if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
@@ -92,14 +92,15 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             {"key": "Conectado a", "width": 150},
             {"key": "Sinal (dB)", "width": 70},
         ]
+        
         self.table = ColumnToggleTree(self, columns=[(c["key"], c["width"]) for c in cols], height=20)
-        self.table.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
-        self.grid_rowconfigure(1, weight=1)
+        self.table.grid(row=2, column=0, sticky="nsew", padx=10, pady=(6, 10))
+        self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.table.set_font_size(TABLE_FONT_SIZE)
 
         bottom_frame = ctk.CTkFrame(self)
-        bottom_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 20))
+        bottom_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=(4, 16))
         self.listUpdateBtn = ctk.CTkButton(bottom_frame, text="Atualizar Lista", command=self._on_click_atualizar)
         self.listUpdateBtn.grid(row=0, column=0, padx=6, pady=6)
 

@@ -2,6 +2,7 @@ import customtkinter as ctk
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.status_led import StatusLed
 from iluflex_tools.widgets.cards import DropDownCard as dpc
+from iluflex_tools.core.ircode import IrCodeLib
 
 class ComandosIRPage(ctk.CTkFrame):
     """
@@ -20,6 +21,7 @@ class ComandosIRPage(ctk.CTkFrame):
         self.received_cmd_raw = ""
         self.ir_command_pre_process = ""
         self.ir_command_converterd = ""
+        self.ir_command_converted_plot = ""
         self.learner_on = False
         # escuta eventos da conexão para logar no console
         self.conn.add_listener(self._on_conn_event)
@@ -56,33 +58,33 @@ class ComandosIRPage(ctk.CTkFrame):
         leftpanel.grid_columnconfigure(0, weight=1)
 
         # Switch Learner (linha 0)
+        self.learner_status_var = ctk.BooleanVar(value=False)
         self.learner_status_sw = ctk.CTkSwitch(
-            leftpanel, text="Modo Learner", command=self._toggle_learner_status
+            leftpanel, text="Modo Learner", command=self._toggle_learner_status,
+            variable=self.learner_status_var, onvalue=True, offvalue=False,
         )
         self.learner_status_sw.grid(row=0, column=0, sticky="w", padx=4, pady=(0, 8))
-
-
 
         # Card: Pré-processamento (linha 2)
         pre_content = dpc.make_card(leftpanel, "Pré-processamento", 2)
         # 1 elemento por linha: label em uma, entry na próxima
-        ctk.CTkLabel(pre_content, text="Pause (µs)").grid(
+        ctk.CTkLabel(pre_content, text="Pause (ms)").grid(
             row=0, column=0, sticky="w", padx=0, pady=(0, 2)
         )
-        self.pause = ctk.CTkEntry(pre_content)
-        self.pause.insert(0, "15000")
-        self.pause.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
+        self.pause_treshold_entry = ctk.CTkEntry(pre_content)
+        self.pause_treshold_entry.insert(0, "15")
+        self.pause_treshold_entry.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
 
         ctk.CTkLabel(pre_content, text="Max Frames").grid(
             row=2, column=0, sticky="w", padx=0, pady=(0, 2)
         )
-        self.frames = ctk.CTkEntry(pre_content)
-        self.frames.insert(0, "3")
-        self.frames.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
+        self.max_frames_entry = ctk.CTkEntry(pre_content)
+        self.max_frames_entry.insert(0, "3")
+        self.max_frames_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
 
-        self.normalize = ctk.CTkSwitch(pre_content, text="Normalize")
-        self.normalize.select()
-        self.normalize.grid(row=4, column=0, sticky="w", padx=0, pady=(0, 8))
+        self.normalize_switch = ctk.CTkSwitch(pre_content, text="Normalize")
+        self.normalize_switch.select()
+        self.normalize_switch.grid(row=4, column=0, sticky="w", padx=0, pady=(0, 8))
 
         self.btn_pre = ctk.CTkButton(pre_content, text="Pré-processar", command=self._preprocess)
         self.btn_pre.grid(row=5, column=0, sticky="ew", padx=0, pady=2)
@@ -125,7 +127,6 @@ class ComandosIRPage(ctk.CTkFrame):
         )
         self.txt_pre = ctk.CTkTextbox(mainpanel, height=100)
         self.txt_pre.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 8))
-        self.txt_pre.configure(state=ctk.DISABLED)
 
         # Canvas (waveform)
         self.wave_wrap = ctk.CTkFrame(mainpanel)
@@ -152,9 +153,9 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _preprocess(self):
         try:
-            pause = int(self.pause.get() or 0)
-            frames = int(self.frames.get() or 0)
-            norm = bool(self.normalize.get())
+            pause = int(self.pause_treshold_entry.get() or 40)
+            frames = int(self.max_frames_entry.get() or 1)
+            norm = bool(self.normalize_switch.get())
         except Exception:
             pause, frames, norm = 15000, 3, True
         src = self.txt_raw.get("1.0", "end").strip()
@@ -228,54 +229,92 @@ class ComandosIRPage(ctk.CTkFrame):
         
     def _process_raw_income(self, message: str)-> None:    
         """ Recebe mensagens e faz o pre processamento. """
-        """
         # estados do learner
-        if "RIR,LEARNER,ON" in message:
+        if  message.startswith("RIR,LEARNER,ON"):
             self.learner_on = True
-            if learner_var is not None:
-                learner_var.set(True)
+            self.learner_status_var.set(True)
+        
+        elif message.startswith("RIR,LEARNER,OFF"):
+            self.learner_on = False
+            self.learner_status_var.set(False)
+        elif message.startswith("sir,2,"):
+            # comando IR cru capturado
             try:
-                learner_switch.set("ON")
-            except Exception:
-                pass
-            status_label.config(text="Modo Learner Ativado", fg="green")
-            continue
-        if "RIR,LEARNER,OFF" in message:
-            learner_on = False
-            if learner_var is not None:
-                learner_var.set(False)
-            try:
-                learner_switch.set("OFF")
-            except Exception:
-                pass
-            status_label.config(text="Modo Learner Desativado", fg="black")
-            continue
+                # 1) Guarda recebido CRU exatamente como veio
+                self.received_cmd_raw = message  # NÃO alterar \n aqui
+                # 2) Pré-processa a partir do CRU com parâmetros atuais
+                pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
+                if 1 <= pause_threshold_ms < 80:
+                    pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
+                else: pause_threshold = 40
+                max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
+                normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
+                normalizedCmd = IrCodeLib.preProcessIrCmd(message, pause_threshold, max_frames, normalize)
+                
+                sir2_str = normalizedCmd.get("new_sir2", "")
+                # 3) Espelha no editor/var e atualiza gráfico
+                if sir2_str:
+                    print("Pre-Process: Temos sir2")
+                    self.txt_pre.delete("1.0", "end")
+                    self.txt_pre.insert("1.0", sir2_str)
+                    #atualizar_grafico()
+                    #update_preproc_overlay(normalizedCmd)
+                else:
+                    #status_label.config(text="Captura inválida ou falha na conversão", fg="orange")
+                    print("Captura inválida ou falha na conversão")
+            except Exception as conv_err:
+                #status_label.config(text=f"Erro conversão: {conv_err}", fg="red")
+                print(f"Erro conversão: {conv_err}")
 
-                # comando IR cru capturado
-                if message.startswith("sir,2,"):
-                    try:
-                        # 1) Guarda recebido CRU exatamente como veio
-                        raw_sir2_data = message  # NÃO alterar \n aqui
-                        # 2) Pré-processa a partir do CRU com parâmetros atuais
-                        pause_threshold = int(pause_threshold_var.get().strip())
-                        max_frames = int(max_frames_var.get()) if max_frames_var else 3
-                        normalize = bool(normalize_var.get()) if normalize_var else True
-                        normalizedCmd = ircode.extract_optimized_frame(raw_sir2_data, pause_threshold, max_frames, normalize)
-                        sir2_str = normalizedCmd.get("new_sir2", "")
-                        # 3) Espelha no editor/var e atualiza gráfico
-                        if sir2_str and toConvert_var is not None:
-                            toConvert_var.set(sir2_str)
-                            if toConvert_text is not None:
-                                toConvert_text.delete("1.0", tk.END)
-                                toConvert_text.insert("1.0", sir2_str)
-                                atualizar_grafico()
-                            update_preproc_overlay(normalizedCmd)
-                        else:
-                            status_label.config(text="Captura inválida ou falha na conversão", fg="orange")
-                    except Exception as conv_err:
-                        status_label.config(text=f"Erro conversão: {conv_err}", fg="red")
-            """
 
     # compatível com o mecanismo de mudar tema
     def on_theme_changed(self):
         pass
+
+
+    def update_preproc_overlay(meta: dict | None = None):
+        """
+        meta: dicionário retornado por ircode.extract_optimized_frame
+            chaves usadas: equal_frames_detected, pairs_preserved, new_sir2
+        sir2_opt: string 'sir,2,...' otimizada (fallback para calcular duração/pulsos)
+        """
+        global pre_process_result_label
+        if pre_process_result_label is None:
+            return
+
+        iguais = 0
+        pares = 0
+        sir2 = None
+
+        if meta:
+            returned_frames = meta.get("returned_frames", 0)
+            equal_frames_detected = meta.get("equal_frames_detected", 0)
+            pairs_preserved = meta.get("pairs_preserved", 0) 
+            total_frames_received = meta.get("total_frames_received", 0)
+            pulses_normalized = meta.get("pulses_normalized", False)
+            sir2 = meta.get("new_sir2") or None
+        else:
+            pre_process_result_label.config(text=f"Falha no processamento dos dados")
+            return
+
+        # duração total (soma dos ticks * 1.6 µs)
+        dur_str = ""
+        if isinstance(sir2, str) and sir2.startswith("sir,2,"):
+            try:
+                parts = [p.strip() for p in sir2.split(",")]
+                ticks = list(map(int, parts[8:]))  # sir,2,<NT>,<Canal>,<Id>,<Per>,<Rep>,<Offset>,<Pulses…>
+                dur_ms = (sum(ticks) * 1.6) / 1000.0
+                dur_str = f"{dur_ms:.1f} ms"
+            except Exception:
+                dur_str = ""
+        # apresenta resultados        
+        if pulses_normalized: 
+            pulses_normalized_txt = "sim"
+        else:
+            pulses_normalized_txt = "não"
+
+        text1 = f"Frames detectados recebidos: {total_frames_received} Frames retornados: {returned_frames}  Frames iguais encontrados: {equal_frames_detected} "
+        text2 = f"Pulsos Normalizados: {pulses_normalized_txt}  Pulsos preservados: {pairs_preserved}  Duração: {dur_str}"
+        print(f"{text1} {text2}")
+        pre_process_result_label.config(text=f"{text1} {text2}")
+

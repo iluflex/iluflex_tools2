@@ -30,6 +30,7 @@ class ConnectionService:
         self._auto_interval = 5.0
         self._listener_lock = threading.Lock()
         self._auto_reconnect_enabled = False  # quando True, desconexões disparam auto‑reconnect
+        self._rx_buf = bytearray()
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
@@ -153,9 +154,36 @@ class ConnectionService:
                     print("[RX] conexão encerrada pelo remoto")
                     break
                 ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                text = data.decode("utf-8", errors="replace")
-                print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
-                self._emit({"type": "rx", "ts": ts, "remote": self._remote, "text": text, "raw": data})
+                print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {data.decode('utf-8','replace')}")
+
+                # 1) acumula no buffer
+                self._rx_buf.extend(data)
+
+                # 2) extrai TODAS as linhas completas terminadas em '\r'
+                while True:
+                    i = self._rx_buf.find(b"\r")
+                    if i == -1:
+                        break  # ainda não há linha completa
+
+                    # bytes da linha (sem o '\r')
+                    line_bytes = bytes(self._rx_buf[:i])
+
+                    # pular '\r' e também um '\n' opcional (CRLF)
+                    skip = 1
+                    if i + 1 < len(self._rx_buf) and self._rx_buf[i + 1] == 0x0A:
+                        skip = 2
+                    del self._rx_buf[:i + skip]
+
+                    # decodifica e emite COMO SEMPRE (type="rx"), mas agora é uma linha completa
+                    line_text = line_bytes.decode("utf-8", errors="replace")
+                    self._emit({
+                        "type": "rx",
+                        "ts": ts,
+                        "remote": self._remote,
+                        "text": line_text,
+                        "raw": line_bytes,
+                    })
+
             except socket.timeout:
                 continue
             except OSError:

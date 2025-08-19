@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.status_led import StatusLed
+from iluflex_tools.widgets.cards import DropDownCard as dpc
 
 class ComandosIRPage(ctk.CTkFrame):
     """
@@ -29,73 +30,118 @@ class ComandosIRPage(ctk.CTkFrame):
             self.conn.remove_listener(self._on_conn_event)
         except Exception:
             pass
-        return super().destroy()
+            return super().destroy()
 
     def _build(self):
-        
-        self.pagetitle = ctk.CTkLabel(self, text="IR Learner - Captura de comandos de Infra Vermelho (IR)", font=ctk.CTkFont(size=16, weight="bold"))
-        self.pagetitle.grid(row=0, column=0, padx=12, pady=6, sticky='w')
+        # Título
+        self.pagetitle = ctk.CTkLabel(
+            self,
+            text="IR Learner - Captura de comandos de Infra Vermelho (IR)",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        )
+        self.pagetitle.grid(row=0, column=0, columnspan=2, padx=12, pady=6, sticky="w")
+
+        # Painéis
+        leftpanel = ctk.CTkFrame(self)
+        leftpanel.grid(row=1, column=0, padx=(10, 6), pady=6, sticky="nsw")
+
+        mainpanel = ctk.CTkFrame(self)
+        mainpanel.grid(row=1, column=1, padx=(6, 10), pady=6, sticky="nsew")
+
+        # Expansão do painel direito
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # ========= LEFTPANEL (estreito): 1 elemento por linha =========
+        leftpanel.grid_columnconfigure(0, weight=1)
+
+        # Switch Learner (linha 0)
+        self.learner_status_sw = ctk.CTkSwitch(
+            leftpanel, text="Modo Learner", command=self._toggle_learner_status
+        )
+        self.learner_status_sw.grid(row=0, column=0, sticky="w", padx=4, pady=(0, 8))
 
 
-        self.grid_rowconfigure(2, weight=1)   # entrada cresce
-        self.grid_columnconfigure(0, weight=1)
+
+        # Card: Pré-processamento (linha 2)
+        pre_content = dpc.make_card(leftpanel, "Pré-processamento", 2)
+        # 1 elemento por linha: label em uma, entry na próxima
+        ctk.CTkLabel(pre_content, text="Pause (µs)").grid(
+            row=0, column=0, sticky="w", padx=0, pady=(0, 2)
+        )
+        self.pause = ctk.CTkEntry(pre_content)
+        self.pause.insert(0, "15000")
+        self.pause.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
+
+        ctk.CTkLabel(pre_content, text="Max Frames").grid(
+            row=2, column=0, sticky="w", padx=0, pady=(0, 2)
+        )
+        self.frames = ctk.CTkEntry(pre_content)
+        self.frames.insert(0, "3")
+        self.frames.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
+
+        self.normalize = ctk.CTkSwitch(pre_content, text="Normalize")
+        self.normalize.select()
+        self.normalize.grid(row=4, column=0, sticky="w", padx=0, pady=(0, 8))
+
+        self.btn_pre = ctk.CTkButton(pre_content, text="Pré-processar", command=self._preprocess)
+        self.btn_pre.grid(row=5, column=0, sticky="ew", padx=0, pady=2)
+
+        # Botão Copiar para Entrada (linha 6)
+        self.btn_capturar = ctk.CTkButton(pre_content, text="Copiar para Entrada:", command=self._capturar)
+        self.btn_capturar.grid(row=6, column=0, sticky="ew", padx=0, pady=2)
+
+        # Card: Conversão (linha 3)
+        conv_content = dpc.make_card(leftpanel, "Conversão", 3)
+        self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)
+        self.btn_conv.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 0))
+
+        # Card: Enviar comando (linha 4)
+        send_content = dpc.make_card(leftpanel, "Enviar comando", 4)
+        self.entry = ctk.CTkEntry(send_content, placeholder_text="Digite o comando a enviar...")
+        self.entry.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
+        ctk.CTkButton(send_content, text="Enviar", command=self._send).grid(
+            row=1, column=0, sticky="ew", padx=0, pady=(0, 0)
+        )
+
+        # ========= MAINPANEL: textos e canvas =========
+        mainpanel.grid_columnconfigure(0, weight=1)
+        mainpanel.grid_rowconfigure(1, weight=1)  # txt_raw
+        mainpanel.grid_rowconfigure(3, weight=1)  # txt_pre
+        mainpanel.grid_rowconfigure(4, weight=2)  # canvas
+        mainpanel.grid_rowconfigure(6, weight=1)  # txt_out
 
         # Campo 1: capturado
-        ctk.CTkLabel(self, text="Entrada:").grid(row=1, column=0, sticky="w", padx=10, pady=2)
-        self.txt_raw = ctk.CTkTextbox(self, height=80)
-        self.txt_raw.grid(row=2, column=0, sticky="ew", padx=10)
+        ctk.CTkLabel(mainpanel, text="Entrada (capturado sir,2)").grid(
+            row=0, column=0, sticky="w", padx=10, pady=(0, 4)
+        )
+        self.txt_raw = ctk.CTkTextbox(mainpanel, height=80)
+        self.txt_raw.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 8))
+        self.txt_raw.configure(state=ctk.DISABLED)
 
         # Campo 2: pré-processado
-        ctk.CTkLabel(self, text="Pré-processado:").grid(row=3, column=0, sticky="w", padx=10, pady=(10,4))
-        self.txt_pre = ctk.CTkTextbox(self, height=80)
-        self.txt_pre.grid(row=4, column=0, sticky="ew", padx=10, pady=(0,8))
+        ctk.CTkLabel(mainpanel, text="Pré-processado").grid(
+            row=2, column=0, sticky="w", padx=10, pady=(0, 4)
+        )
+        self.txt_pre = ctk.CTkTextbox(mainpanel, height=100)
+        self.txt_pre.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 8))
+        self.txt_pre.configure(state=ctk.DISABLED)
 
-        # Canvas para gráfico
-        self.wave_wrap = ctk.CTkFrame(self)
-        self.wave_wrap.grid(row=5, column=0, sticky="nsew", padx=10, pady=4)
-        self.grid_rowconfigure(5, weight=1)
+        # Canvas (waveform)
+        self.wave_wrap = ctk.CTkFrame(mainpanel)
+        self.wave_wrap.grid(row=4, column=0, sticky="nsew", padx=10, pady=4)
         self.wave_wrap.grid_rowconfigure(0, weight=1)
         self.wave_wrap.grid_columnconfigure(0, weight=1)
         self.wave = WaveformCanvas(self.wave_wrap)
         self.wave.grid(row=0, column=0, sticky="nsew")
 
-        # Campo 3: saída (sir,3 + sir,4)
-        ctk.CTkLabel(self, text="Saída: (comandos convertidos com button tag)").grid(row=6, column=0, sticky="w", padx=10, pady=(10,4))
-        self.txt_out = ctk.CTkTextbox(self, height=100)
-        self.txt_out.grid(row=7, column=0, sticky="nsew", padx=10)
-        self.grid_rowconfigure(7, weight=1)
-
-        #  opções + botões
-        foot = ctk.CTkFrame(self)
-        foot.grid(row=8, column=0, sticky="ew", padx=10, pady=(8,10))
-        foot.grid_columnconfigure(5, weight=1)
-
-        self.normalize = ctk.CTkSwitch(foot, text="Normalize"); self.normalize.select()
-        self.pause = ctk.CTkEntry(foot, width=120); self.pause.insert(0, "15000")
-        self.frames = ctk.CTkEntry(foot, width=80); self.frames.insert(0, "3")
-        ctk.CTkLabel(foot, text="Pause (µs)").grid(row=0, column=0, padx=6)
-        self.pause.grid(row=0, column=1)
-        ctk.CTkLabel(foot, text="Max Frames").grid(row=0, column=2, padx=(12,6))
-        self.frames.grid(row=0, column=3)
-        self.normalize.grid(row=0, column=4, padx=(12,6))
-
-        self.btn_capturar = ctk.CTkButton(foot, text="Capturar", command=self._capturar)
-        self.btn_pre = ctk.CTkButton(foot, text="Pré-processar", command=self._preprocess)
-        self.btn_conv = ctk.CTkButton(foot, text="Converter (sir,3/sir,4)", command=self._convert)
-        self.btn_capturar.grid(row=0, column=6, padx=6)
-        self.btn_pre.grid(row=0, column=7, padx=6)
-        self.btn_conv.grid(row=0, column=8, padx=6)
-
-        # envio de comandos frame
-        sendcmd_frame = ctk.CTkFrame(self)
-        sendcmd_frame.grid(row=8, column=0, sticky="ew", padx=10, pady=(8,10))
-        sendcmd_frame.grid_columnconfigure(5, weight=1)
-        self.learner_status_sw = ctk.CTkSwitch(sendcmd_frame, text="Learner Status", command=self._toggle_learner_status)
-        self.learner_status_sw.pack(side="left", padx=(0, 8))
-        self.entry = ctk.CTkEntry(sendcmd_frame, placeholder_text="Digite o comando a enviar...", width=600)
-        self.entry.pack(side="left", padx=(0, 8))
-        ctk.CTkButton(sendcmd_frame, text="Enviar", command=self._send).pack(side="left", padx=(0, 8))
-
+        # Campo 3: saída (sir,3/sir,4)
+        ctk.CTkLabel(mainpanel, text="Saída (comandos convertidos sir,3/sir,4)").grid(
+            row=5, column=0, sticky="w", padx=10, pady=(10, 4)
+        )
+        self.txt_out = ctk.CTkTextbox(mainpanel, height=100)
+        self.txt_out.grid(row=6, column=0, sticky="nsew", padx=10, pady=(0, 8))
+        self.txt_out.configure(state=ctk.DISABLED)
 
     # --- Ações ---
     def _capturar(self):

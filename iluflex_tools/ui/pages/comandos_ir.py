@@ -1,6 +1,5 @@
 import customtkinter as ctk
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
-from iluflex_tools.widgets.status_led import StatusLed
 from iluflex_tools.widgets.cards import DropDownCard as dpc
 from iluflex_tools.core.ircode import IrCodeLib
 
@@ -133,8 +132,11 @@ class ComandosIRPage(ctk.CTkFrame):
         self.wave_wrap.grid(row=4, column=0, sticky="nsew", padx=10, pady=4)
         self.wave_wrap.grid_rowconfigure(0, weight=1)
         self.wave_wrap.grid_columnconfigure(0, weight=1)
-        self.wave = WaveformCanvas(self.wave_wrap)
+        # Cria o gráfico dos comandos em forma de osciloscópio.
+        self.wave = WaveformCanvas(self.wave_wrap, height=120)
         self.wave.grid(row=0, column=0, sticky="nsew")
+        # zoom inicial agradável
+        self.wave.set_zoom(0.05)
 
         # Campo 3: saída (sir,3/sir,4)
         ctk.CTkLabel(mainpanel, text="Saída (comandos convertidos sir,3/sir,4)").grid(
@@ -207,11 +209,12 @@ class ComandosIRPage(ctk.CTkFrame):
         self.after(0, lambda e=ev: self._handle_ev(e))
 
     def _handle_ev(self, ev: dict):
-        t = ev.get("ts", "--:--:--.---")
+        # t = ev.get("ts", "--:--:--.---")
         typ = ev.get("type") # event types: connect, disconnect, tx, rx, error
         buffer = ev.get("text")
         buffer = str(buffer).strip()
         if typ == "rx" and buffer:
+            # chegou dados, vamos colocar no campo 'Entrada'
             self.received_cmd_raw = buffer
             self.txt_raw.configure(state=ctk.NORMAL)
             self.txt_raw.insert(ctk.END, buffer + "\n")
@@ -223,7 +226,11 @@ class ComandosIRPage(ctk.CTkFrame):
                 self.txt_raw.insert(ctk.END, "\n".join(lines) + "\n")
             self.txt_raw.see(ctk.END)
             self.txt_raw.configure(state=ctk.DISABLED)
-
+            
+            if buffer.startswith("sir,2,"):
+                # guardar para outras etapas
+                self.received_cmd_raw = buffer
+            
             self._process_raw_income(buffer)
 
         
@@ -241,7 +248,7 @@ class ComandosIRPage(ctk.CTkFrame):
             # comando IR cru capturado
             try:
                 # 1) Guarda recebido CRU exatamente como veio
-                self.received_cmd_raw = message  # NÃO alterar \n aqui
+                # self.received_cmd_raw = message  # já foi feito.
                 # 2) Pré-processa a partir do CRU com parâmetros atuais
                 pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
                 if 1 <= pause_threshold_ms < 80:
@@ -249,6 +256,7 @@ class ComandosIRPage(ctk.CTkFrame):
                 else: pause_threshold = 40
                 max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
                 normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
+
                 normalizedCmd = IrCodeLib.preProcessIrCmd(message, pause_threshold, max_frames, normalize)
                 
                 sir2_str = normalizedCmd.get("new_sir2", "")
@@ -257,7 +265,11 @@ class ComandosIRPage(ctk.CTkFrame):
                     print("Pre-Process: Temos sir2")
                     self.txt_pre.delete("1.0", "end")
                     self.txt_pre.insert("1.0", sir2_str)
+
+                    # [+] manter variável e atualizar o canvas com auto-zoom
+                    self.ir_command_pre_process = sir2_str
                     #atualizar_grafico()
+                    self._update_waveform()
                     #update_preproc_overlay(normalizedCmd)
                 else:
                     #status_label.config(text="Captura inválida ou falha na conversão", fg="orange")
@@ -318,3 +330,43 @@ class ComandosIRPage(ctk.CTkFrame):
         print(f"{text1} {text2}")
         pre_process_result_label.config(text=f"{text1} {text2}")
 
+    # [+] helper: calcula zoom para “encaixar” a série no canvas
+    def _auto_zoom_to(self, sir2: str, fill: float = 0.9) -> None:
+        """
+        Ajusta o zoom para que a série sir,2 preencha ~fill da largura visível.
+        fill=0.9 => 90% da largura.
+        """
+        try:
+            if not sir2 or not sir2.startswith("sir,2,"):
+                return
+            parts = [p for p in sir2.strip()[6:].split(",") if p]
+            # tenta pulses a partir do índice 6 do corpo (tolerante a headers)
+            ints = []
+            for tok in parts[6:]:
+                try:
+                    ints.append(int(tok))
+                except Exception:
+                    break
+            total_ticks = sum(ints)
+            if total_ticks <= 0:
+                return
+
+            w = max(200, self.wave.winfo_width() or self.wave.winfo_reqwidth() or 400)
+            # margem ~20 px; preenche 'fill' da largura
+            px_per_tick = max(0.01, (fill * w - 20) / total_ticks)
+            self.wave.set_zoom(px_per_tick)
+        except Exception:
+            pass
+
+
+    # [+] Atualiza o canvas uma única vez com o que existir nas três variáveis
+    def _update_waveform(self):
+        self.wave.set_commands(
+            received=self.received_cmd_raw or "",
+            pre=self.ir_command_pre_process or "",
+            converted=self.ir_command_converted_plot or "",
+        )
+        # Auto-zoom prioriza PRE (se houver), senão RAW, senão CONVERTED
+        ref = self.ir_command_pre_process or self.received_cmd_raw or self.ir_command_converted_plot
+        if ref:
+            self._auto_zoom_to(ref)

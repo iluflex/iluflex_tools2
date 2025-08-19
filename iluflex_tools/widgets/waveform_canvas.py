@@ -1,6 +1,34 @@
 import tkinter as tk
 import math
 from typing import List, Dict, Optional
+import customtkinter as ctk
+
+# Paleta alinhada ao table_tree (cores idênticas por tema)
+_THEME_COLORS = {
+    "light": {
+        "bg": "#7A7A7A", "fg": "#111111",
+        "grid_border": "#d0d0d0", "grid_light": "#e6e6e6", "grid_dark": "#c0c0c0",
+        "header_bg": "#A8A8A8", "header_hover_bg": "#d9d9d9",
+        "row_hover_bg": "#DAEBFF", "odd_bg": "#ffffff", "even_bg": "#E5E2E2",
+        "sel_bg": "#3b82f6", "sel_fg": "#ffffff",
+    },
+    "dark": {
+        "bg": "#1f1f1f", "fg": "#eaeaea",
+        "grid_border": "#3a3a3a", "grid_light": "#4a4a4a", "grid_dark": "#252525",
+        "header_bg": "#2a2a2a", "header_hover_bg": "#323232",
+        "row_hover_bg": "#2b3648", "odd_bg": "#232323", "even_bg": "#1b1b1b",
+        "sel_bg": "#3b82f6", "sel_fg": "#ffffff",
+    },
+}
+
+def _palette() -> dict:
+    try:
+        mode = ctk.get_appearance_mode()
+    except Exception:
+        mode = "Light"
+    key = "dark" if str(mode).lower().startswith("dark") else "light"
+    return dict(_THEME_COLORS.get(key, _THEME_COLORS["light"]))
+
 
 TICKS_PER_MS = 625.0  # 1 ms ≈ 625 ticks (1.6 µs por tick)
 
@@ -61,7 +89,10 @@ class WaveformCanvas(tk.Canvas):
     """
 
     def __init__(self, master, **kwargs):
-        super().__init__(master, bg="#111111", highlightthickness=0, **kwargs)
+        pal = _palette()
+        self._pal = _palette()
+        super().__init__(master, bg=pal["bg"], highlightthickness=0, **kwargs)
+
         self.received_cmd_raw: str = ""
         self.ir_command_pre_process: str = ""
         self.ir_command_converted_plot: str = ""
@@ -79,6 +110,8 @@ class WaveformCanvas(tk.Canvas):
         self.bind("<Configure>", lambda e: self.redraw())
 
     # --------------------------- API pública ---------------------------
+        
+
     def set_zoom(self, px_per_tick: float) -> None:
         """Define a escala horizontal (pixels por 'tick')."""
         try:
@@ -203,16 +236,26 @@ class WaveformCanvas(tk.Canvas):
         self.create_text(left_x, base_y - 12, text="tempo (ms)",
                          anchor="w", font=("TkDefaultFont", 8), fill="#aaa")
 
+    def _on_resize(self):
+        #self._pal = _palette()
+        try:
+            self.configure(bg=self._pal["bg"])
+        except Exception:
+            pass
+        self.redraw()
+
+
     def redraw(self) -> None:
         """Redesenha o canvas com as trilhas disponíveis."""
         self.delete("all")
 
         # monta séries a desenhar (ordem: capturado, otimizado, convertido)
+        #pal = self._pal
         series: List[Dict] = []
         if self._pulses_received:
-            series.append({"pulses": self._pulses_received, "label": "capturado", "color": "#d1d5db"})
+            series.append({"pulses": self._pulses_received, "label": "capturado", "color": self._pal["fg"]})
         if self._pulses_pre:
-            series.append({"pulses": self._pulses_pre, "label": "otimizado", "color": "#60a5fa"})
+            series.append({"pulses": self._pulses_pre, "label": "otimizado", "color": self._pal["sel_bg"]})
         if self._pulses_conv:
             series.append({"pulses": self._pulses_conv, "label": "convertido", "color": "#fbbf24"})
 

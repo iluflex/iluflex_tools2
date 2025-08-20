@@ -16,6 +16,7 @@ from tkinter import font as tkfont
 from iluflex_tools.widgets.table_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService, parse_rrf10_lines
 from iluflex_tools.core.settings import load_settings, save_settings
+from iluflex_tools.widgets.page_title import PageTitle
 import time
 import re
 
@@ -63,8 +64,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         #bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
         #bar.grid_columnconfigure(9, weight=1)
 
-        self.pagetitle = ctk.CTkLabel(self, text="Gestão de Dispositivos", font=ctk.CTkFont(size=16, weight="bold"))
-        self.pagetitle.grid(row=0, column=0, padx=12, pady=6, sticky='w')
+        self.pagetitle = PageTitle(self, "Gestão de Dispositivos")
                                   
         #).pack(side="left", padx=(4, 12))
 

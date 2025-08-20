@@ -2,6 +2,7 @@ import customtkinter as ctk
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.cards import DropDownCard as dpc
 from iluflex_tools.core.ircode import IrCodeLib
+from iluflex_tools.widgets.buttontags import ButtonTagsWidget
 
 class ComandosIRPage(ctk.CTkFrame):
     """
@@ -98,13 +99,17 @@ class ComandosIRPage(ctk.CTkFrame):
         self.btn_pre.grid(row=5, column=0, sticky="ew", padx=0, pady=2)
 
         # Botão Copiar para Entrada (linha 6)
-        self.btn_capturar = ctk.CTkButton(pre_content, text="Copiar para Entrada:", command=self._capturar)
-        self.btn_capturar.grid(row=6, column=0, sticky="ew", padx=0, pady=2)
+        self.btn_copiar = ctk.CTkButton(pre_content, text="Copiar para Entrada:", command=self._copiar_para_entrada)
+        self.btn_copiar.grid(row=6, column=0, sticky="ew", padx=0, pady=2)
 
         # Card: Conversão (linha 3)
         conv_content = dpc.make_card(leftpanel, "Conversão", 3)
+
+        self.tag_picker = ButtonTagsWidget(conv_content, on_change=None, width_combobox=22)
+        self.tag_picker.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
+
         self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)
-        self.btn_conv.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 0))
+        self.btn_conv.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 0))
 
         # Card: Enviar comando (linha 4)
         send_content = dpc.make_card(leftpanel, "Enviar comando", 4)
@@ -314,7 +319,7 @@ class ComandosIRPage(ctk.CTkFrame):
                     self.ir_command_pre_process = sir2_str
                     
                     ### só para testes ##########################
-                    self.ir_command_converted_plot = sir2_str
+                    # self.ir_command_converted_plot = sir2_str
 
                     #atualizar_grafico()
                     self._update_waveform()
@@ -413,4 +418,62 @@ class ComandosIRPage(ctk.CTkFrame):
         # reposiciona o pan na mesma fração após mudar o zoom
         self.wave.xview_moveto(first)
 
+        #--------------- Actions ----------------------
 
+
+    def _copiar_para_entrada(self):
+        """Promove um `sir,2` do editor para a entrada crua (`raw_sir2_data`) e reprocessa.
+        - Só aceita `sir,2`. Para `sir,3/4` mostra aviso e não altera a entrada.
+        """
+
+        texto = self.btn_copiar.get("1.0", "end-1c")  # preservar tal como está; não strip para manter finais se houver
+        trimmed = str(texto).strip()
+        if not trimmed:
+            self.status.configure(text="Erro: copiar para entrada falhou, campo vaziu !", color="#FF0000")
+            return
+        if not trimmed.startswith("sir,2,"):
+            self.status.configure(text= "Erro: Apenas formato Long é aceito aqui (sir,2). Para sir,3/sir,4 use Converter → Iluflex Long.",color="#FF0000")
+            return
+        # Define a nova entrada crua EXATAMENTE como no editor (não adicionar/criar aqui)
+        self.received_cmd_raw = trimmed
+        # Atualiza campo de entrada com o comando copiado.
+        self.txt_raw.configure(state=ctk.NORMAL)
+        self.txt_raw.delete("1.0", ctk.END)
+        self.txt_raw.insert("1.0", trimmed + '\n')
+        self.txt_raw.configure(state=ctk.DISABLED)
+
+        self._reprocess_from_raw()
+
+
+    def _reprocess_from_raw(self):
+        """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
+        if not self.received_cmd_raw:
+            self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.")
+            return
+        try:
+            pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
+            if 1 <= pause_threshold_ms < 80:
+                pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
+            else: pause_threshold = 40000
+            max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
+            normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
+
+            normalizedCmd = IrCodeLib.preProcessIrCmd(self.received_cmd_raw, pause_threshold, max_frames, normalize)
+            
+            new_sir2 = normalizedCmd.get("new_sir2", "")
+            if new_sir2:
+                print("Reproces Pre-Process: Temos new_sir2")
+                self.txt_pre.delete("1.0", "end")
+                self.txt_pre.insert("1.0", new_sir2)
+
+                # [+] manter variável e atualizar o canvas com auto-zoom
+                self.ir_command_pre_process = new_sir2
+                #atualizar_grafico()
+                
+                self.update_preproc_overlay(normalizedCmd)
+            else:
+                self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
+        except Exception as e:
+            print("Pré-processamento", f"Erro ao reprocessar: {e}")
+        finally:
+            self._update_waveform()

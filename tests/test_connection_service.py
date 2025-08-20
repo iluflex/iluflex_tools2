@@ -49,3 +49,35 @@ def test_listener_can_remove_other_during_emit():
 
     assert calls == ["l1", "l2", "l1"]
 
+
+def test_recv_loop_parses_ascii_and_binary_messages():
+    cs = ConnectionService()
+    events = []
+
+    def listener(ev):
+        events.append(ev)
+
+    cs.add_listener(listener)
+
+    import socket, threading, time
+
+    s1, s2 = socket.socketpair()
+    cs._sock = s1
+    cs.connected = True
+    t = threading.Thread(target=cs._recv_loop, daemon=True)
+    t.start()
+
+    s2.sendall(b"HEL")
+    s2.sendall(b"LO\rWOR")
+    s2.sendall(b"LD\r")
+    # binary message split across sends: A5 <opcode=0x01> <len=0x02> 'AB' <checksum=0xCD>
+    s2.sendall(b"\xA5\x01\x02A")
+    s2.sendall(b"B\xCD")
+    time.sleep(0.1)
+    s2.shutdown(socket.SHUT_RDWR)
+    s2.close()
+    t.join(timeout=1)
+
+    rx_events = [ev["raw"] for ev in events if ev["type"] == "rx"]
+    assert rx_events == [b"HELLO\r", b"WORLD\r", b"\xA5\x01\x02AB\xCD"]
+

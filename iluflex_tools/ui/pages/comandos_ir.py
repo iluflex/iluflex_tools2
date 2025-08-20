@@ -76,24 +76,29 @@ class ComandosIRPage(ctk.CTkFrame):
 
         # Card: Pré-processamento (linha 2)
         pre_content = dpc.make_card(leftpanel, "Pré-processamento", 2)
-
+        
+        # Pause threshold (ms)
         self.pause_treshold_label = ctk.CTkLabel(pre_content, text="Pause (ms)")
         self.pause_treshold_label.grid(row=0, column=0, sticky="w", padx=0, pady=(0, 2))
         self.pause_treshold_entry = ctk.CTkEntry(pre_content, width=60)
         self.pause_treshold_entry.insert(0, "40")
         self.pause_treshold_entry.grid(row=0, column=0, sticky="e", padx=0, pady=(0, 8))
 
+        # Max frames (DEFAULT = 3)
         self.max_frames_label = ctk.CTkLabel(pre_content, text="Max Frames:")
         self.max_frames_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2)        )
-        self.max_frames_cbox = ctk.CTkComboBox( pre_content, values=["1","2","3","4"], width=60)
+        self.max_frames_cbox = ctk.CTkComboBox( pre_content, values=["1","2","3","4"], width=60, command=self._max_frames_change)
         self.max_frames_cbox.grid(row=1, column=0, sticky="e", padx=0, pady=(0, 8))
+        self.max_frames_cbox.set("3")
 
+        # Normalizar
         self.normalize_switch_label = ctk.CTkLabel(pre_content, text="Normalizar:")
         self.normalize_switch_label.grid(row=2, column=0, sticky="w", padx=0, pady=(0, 2))
         self.normalize_switch = ctk.CTkSwitch(pre_content, text="", width=60, command=self._process_from_raw)
         self.normalize_switch.select()
         self.normalize_switch.grid(row=2, column=0, sticky="e", padx=0, pady=(0, 8))
 
+        # Botões Pré-processar + Copiar
         self.btn_pre = ctk.CTkButton(pre_content, text="Pré-processar", command=self._process_from_raw)
         self.btn_pre.grid(row=3, column=0, sticky="ew", padx=0, pady=2)
 
@@ -101,9 +106,10 @@ class ComandosIRPage(ctk.CTkFrame):
         self.btn_copiar.grid(row=4, column=0, sticky="ew", padx=0, pady=2)
 
         # Bindings
-        self.max_frames_cbox.bind("<<ComboboxSelected>>", lambda e: self._process_from_raw())
-        self.max_frames_cbox.bind("<<ComboboxSelected>>", lambda e: self._process_from_raw())
-        self.max_frames_cbox.bind("<FocusOut>", lambda e: self._process_from_raw())
+        self.pause_treshold_entry.bind("<FocusOut>", lambda e: self._process_from_raw())
+        self.pause_treshold_entry.bind("<Return>", lambda e: self._process_from_raw())
+        #self.max_frames_cbox.bind("<<ComboboxSelected>>", lambda e: self._process_from_raw())
+        #self.max_frames_cbox.bind("<FocusOut>", lambda e: self._process_from_raw())
 
         # Card: Conversão (linha 3)
         conv_content = dpc.make_card(leftpanel, "Conversão", 3)
@@ -112,7 +118,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
         self.cmd_repeat_label = ctk.CTkLabel(conv_content, text="Repetições:")
         self.cmd_repeat_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2)        )
-        self.cmd_repeat_cbox = ctk.CTkComboBox( conv_content, values=["1","2","3","4"], width=60)
+        self.cmd_repeat_cbox = ctk.CTkComboBox(conv_content, values=["1", "2", "3", "4"], width=60)
         self.cmd_repeat_cbox.grid(row=1, column=0, sticky="e", padx=0, pady=(0, 8))
 
         self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)
@@ -137,17 +143,13 @@ class ComandosIRPage(ctk.CTkFrame):
         mainpanel.grid_rowconfigure(6, weight=1)  # txt_out
 
         # Campo 1: capturado
-        ctk.CTkLabel(mainpanel, text="Entrada (capturado sir,2)").grid(
-            row=0, column=0, sticky="w", padx=10, pady=(0, 4)
-        )
+        ctk.CTkLabel(mainpanel, text="Entrada (capturado sir,2)").grid(row=0, column=0, sticky="w", padx=10, pady=(0, 4))
         self.txt_raw = ctk.CTkTextbox(mainpanel, height=100)
         self.txt_raw.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 8))
         self.txt_raw.configure(state=ctk.DISABLED)
 
         # Campo 2: pré-processado
-        ctk.CTkLabel(mainpanel, text="Pré-processado").grid(
-            row=2, column=0, sticky="w", padx=10, pady=(0, 4)
-        )
+        ctk.CTkLabel(mainpanel, text="Pré-processado").grid(row=2, column=0, sticky="w", padx=10, pady=(0, 4))
         self.txt_pre = ctk.CTkTextbox(mainpanel, height=80)
         self.txt_pre.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 8))
 
@@ -180,9 +182,7 @@ class ComandosIRPage(ctk.CTkFrame):
         self.zoom_slider.grid(row=0, column=0, padx=(54, 16), pady=2, sticky="w")
         
         # régua/scrollbar horizontal de pan (mostra fração visível)
-        self.x_scroll = ctk.CTkScrollbar(
-            ctrl, orientation="horizontal", command=self.wave.xview
-        )
+        self.x_scroll = ctk.CTkScrollbar(ctrl, orientation="horizontal", command=self.wave.xview        )
         self.x_scroll.grid(row=0, column=1, padx=(6, 8), pady=2, sticky="ew")
 
         # Conecta o Canvas para atualizar o “thumb” da régua automaticamente
@@ -195,7 +195,7 @@ class ComandosIRPage(ctk.CTkFrame):
         )
         self.txt_out = ctk.CTkTextbox(mainpanel, height=120)
         self.txt_out.grid(row=6, column=0, sticky="nsew", padx=10, pady=(0, 8))
-        self.txt_out.configure(state=ctk.DISABLED)
+  
 
         # Para comentários e avisos e resultado de conversões.
         self.status = ctk.CTkLabel(mainpanel, text="", anchor="w")
@@ -238,6 +238,12 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _clear(self):
         self.status.configure(text="")
+
+    def _max_frames_change(self, choice):
+        maxf = self.max_frames_cbox.get()
+        print(f"max frames changed to {maxf} and choice is {choice}")
+        self._process_from_raw()
+        
 
     # ---- eventos da conexão ----
     def _on_conn_event(self, ev: dict):
@@ -284,7 +290,8 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _process_from_raw(self):
         """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
-        if not self.received_cmd_raw:
+        print(f"raw = {self.received_cmd_raw}")
+        if not self.received_cmd_raw or self.received_cmd_raw == "":
             self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.")
             return
         if not self.received_cmd_raw.startswith("sir,2,"):
@@ -313,9 +320,10 @@ class ComandosIRPage(ctk.CTkFrame):
                 
                 self.update_preproc_overlay(normalizedCmd)
             else:
-                self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
+                self.status.configure(text="Captura inválida ou falha na conversão", text_color="orange")
         except Exception as e:
             print("Pré-processamento", f"Erro ao reprocessar: {e}", fg="red")
+            self.status.configure(text=f"Erro ao reprocessar: {e}", text_color="red")
         finally:
             self._update_waveform()
 
@@ -412,7 +420,7 @@ class ComandosIRPage(ctk.CTkFrame):
         - Só aceita `sir,2`. Para `sir,3/4` mostra aviso e não altera a entrada.
         """
 
-        texto = self.btn_copiar.get("1.0", "end-1c")  # preservar tal como está; não strip para manter finais se houver
+        texto = self.txt_pre.get("1.0", "end-1c")  # preservar tal como está; não strip para manter finais se houver
         trimmed = str(texto).strip()
         if not trimmed:
             self.status.configure(text="Erro: copiar para entrada falhou, campo vaziu !", color="#FF0000")

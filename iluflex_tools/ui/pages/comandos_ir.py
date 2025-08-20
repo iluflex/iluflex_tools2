@@ -15,15 +15,24 @@ class ComandosIRPage(ctk.CTkFrame):
         super().__init__(master)
         self.conn = conn
         self.ir = ir_service
-        self._last_raw = "sir,2,126,1,1,258,1,1,1888,6163,236,1052,236,408,236,408,236,"
-        self._build()
+        
+        # escuta eventos da conexão para receber dados.
+        self.conn.add_listener(self._on_conn_event)
+
+        # --- Controles de zoom/pan (espelhando o learner) ---
+        self.x_scale_var = ctk.DoubleVar(value=0.005)  # pixels por tick (1 tick ≈ 1.6 µs)
+        self.x_scroll = None
+        self.zoom_slider = None
+
+        # comandos de IR guardados do Learner
         self.received_cmd_raw = ""
         self.ir_command_pre_process = ""
         self.ir_command_converterd = ""
         self.ir_command_converted_plot = ""
         self.learner_on = False
-        # escuta eventos da conexão para logar no console
-        self.conn.add_listener(self._on_conn_event)
+
+        # gera a página
+        self._build()
 
     def destroy(self):
         # remove listener ao sair
@@ -31,7 +40,7 @@ class ComandosIRPage(ctk.CTkFrame):
             self.conn.remove_listener(self._on_conn_event)
         except Exception:
             pass
-            return super().destroy()
+        return super().destroy()
 
     def _build(self):
         # Título
@@ -106,17 +115,20 @@ class ComandosIRPage(ctk.CTkFrame):
         )
 
         # ========= MAINPANEL: textos e canvas =========
+        self.CANVAS_H = 124          # altura fixa do gráfico
+        self.CANVAS_CTRL_H = 28      # altura da régua/controles abaixo do gráfico
+
         mainpanel.grid_columnconfigure(0, weight=1)
         mainpanel.grid_rowconfigure(1, weight=1)  # txt_raw
         mainpanel.grid_rowconfigure(3, weight=1)  # txt_pre
-        mainpanel.grid_rowconfigure(4, weight=2)  # canvas
+        mainpanel.grid_rowconfigure(4, weight=0, minsize=self.CANVAS_H + self.CANVAS_CTRL_H + 8)
         mainpanel.grid_rowconfigure(6, weight=1)  # txt_out
 
         # Campo 1: capturado
         ctk.CTkLabel(mainpanel, text="Entrada (capturado sir,2)").grid(
             row=0, column=0, sticky="w", padx=10, pady=(0, 4)
         )
-        self.txt_raw = ctk.CTkTextbox(mainpanel, height=80)
+        self.txt_raw = ctk.CTkTextbox(mainpanel, height=100)
         self.txt_raw.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 8))
         self.txt_raw.configure(state=ctk.DISABLED)
 
@@ -124,27 +136,58 @@ class ComandosIRPage(ctk.CTkFrame):
         ctk.CTkLabel(mainpanel, text="Pré-processado").grid(
             row=2, column=0, sticky="w", padx=10, pady=(0, 4)
         )
-        self.txt_pre = ctk.CTkTextbox(mainpanel, height=100)
+        self.txt_pre = ctk.CTkTextbox(mainpanel, height=80)
         self.txt_pre.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 8))
 
         # Canvas (waveform)
         self.wave_wrap = ctk.CTkFrame(mainpanel)
         self.wave_wrap.grid(row=4, column=0, sticky="nsew", padx=10, pady=4)
-        self.wave_wrap.grid_rowconfigure(0, weight=1)
+        self.wave_wrap.grid_rowconfigure(0, weight=0, minsize=self.CANVAS_H)
+        self.wave_wrap.grid_rowconfigure(1, weight=0, minsize=self.CANVAS_CTRL_H)  # linha da régua/scroll
         self.wave_wrap.grid_columnconfigure(0, weight=1)
         # Cria o gráfico dos comandos em forma de osciloscópio.
-        self.wave = WaveformCanvas(self.wave_wrap, height=120)
-        self.wave.grid(row=0, column=0, sticky="nsew")
-        # zoom inicial agradável
-        self.wave.set_zoom(0.05)
+        self.wave = WaveformCanvas(self.wave_wrap, height=self.CANVAS_H)
+        self.wave.grid(row=0, column=0, sticky="ew")
+        # zoom inicial definido no init
+        self.wave.set_zoom(self.x_scale_var.get())
+
+        # Permite que o Canvas reporte scroll horizontal (para manter o slider de pan sincronizado)
+        # self.wave.configure(xscrollcommand=self._on_canvas_xscroll)
+
+        # Barra de controles (Zoom / Pan)
+        ctrl = ctk.CTkFrame(self.wave_wrap)
+        ctrl.grid(row=1, column=0, sticky="ew", padx=0, pady=(6, 0))
+        ctrl.grid_columnconfigure(1, weight=1)  # pan ocupa o espaço
+
+        # Zoom (0.005 .. 0.5 px/tick) – igual ao learner (0.05 default)
+        ctk.CTkLabel(ctrl, text="Zoom").grid(row=0, column=0, padx=(6, 6), pady=2, sticky="w")
+        self.zoom_slider = ctk.CTkSlider(
+            ctrl, from_=0.002, to=0.05, number_of_steps=100, command=self._on_zoom_changed, width=160
+        )
+        self.zoom_slider.set(self.x_scale_var.get())
+        self.zoom_slider.grid(row=0, column=0, padx=(54, 16), pady=2, sticky="w")
+        
+        # régua/scrollbar horizontal de pan (mostra fração visível)
+        self.x_scroll = ctk.CTkScrollbar(
+            ctrl, orientation="horizontal", command=self.wave.xview
+        )
+        self.x_scroll.grid(row=0, column=1, padx=(6, 8), pady=2, sticky="ew")
+
+        # Conecta o Canvas para atualizar o “thumb” da régua automaticamente
+        self.wave.configure(xscrollcommand=self.x_scroll.set)
+
 
         # Campo 3: saída (sir,3/sir,4)
         ctk.CTkLabel(mainpanel, text="Saída (comandos convertidos sir,3/sir,4)").grid(
             row=5, column=0, sticky="w", padx=10, pady=(10, 4)
         )
-        self.txt_out = ctk.CTkTextbox(mainpanel, height=100)
+        self.txt_out = ctk.CTkTextbox(mainpanel, height=120)
         self.txt_out.grid(row=6, column=0, sticky="nsew", padx=10, pady=(0, 8))
         self.txt_out.configure(state=ctk.DISABLED)
+
+        # Para comentários e avisos e resultado de conversões.
+        self.status = ctk.CTkLabel(mainpanel, text="", anchor="w")
+        self.status.grid(row=7, column=0, sticky="ew", padx=10, pady=(0, 6))
 
     # --- Ações ---
     def _capturar(self):
@@ -164,6 +207,7 @@ class ComandosIRPage(ctk.CTkFrame):
         pre = self.ir.preprocess(src, pause, frames, norm)
         self.txt_pre.delete("1.0", "end")
         self.txt_pre.insert("1.0", pre)
+
         self.status.configure(text="Pré-processo concluído.")
 
     def _convert(self):
@@ -253,7 +297,7 @@ class ComandosIRPage(ctk.CTkFrame):
                 pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
                 if 1 <= pause_threshold_ms < 80:
                     pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
-                else: pause_threshold = 40
+                else: pause_threshold = 40000
                 max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
                 normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
 
@@ -268,15 +312,20 @@ class ComandosIRPage(ctk.CTkFrame):
 
                     # [+] manter variável e atualizar o canvas com auto-zoom
                     self.ir_command_pre_process = sir2_str
+                    
+                    ### só para testes ##########################
+                    self.ir_command_converted_plot = sir2_str
+
                     #atualizar_grafico()
                     self._update_waveform()
-                    #update_preproc_overlay(normalizedCmd)
+                    self.update_preproc_overlay(normalizedCmd)
                 else:
-                    #status_label.config(text="Captura inválida ou falha na conversão", fg="orange")
+                    self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
                     print("Captura inválida ou falha na conversão")
             except Exception as conv_err:
                 #status_label.config(text=f"Erro conversão: {conv_err}", fg="red")
                 print(f"Erro conversão: {conv_err}")
+
 
 
     # compatível com o mecanismo de mudar tema
@@ -284,15 +333,12 @@ class ComandosIRPage(ctk.CTkFrame):
         pass
 
 
-    def update_preproc_overlay(meta: dict | None = None):
+    def update_preproc_overlay(self, meta: dict | None = None):
         """
         meta: dicionário retornado por ircode.extract_optimized_frame
             chaves usadas: equal_frames_detected, pairs_preserved, new_sir2
         sir2_opt: string 'sir,2,...' otimizada (fallback para calcular duração/pulsos)
         """
-        global pre_process_result_label
-        if pre_process_result_label is None:
-            return
 
         iguais = 0
         pares = 0
@@ -306,7 +352,7 @@ class ComandosIRPage(ctk.CTkFrame):
             pulses_normalized = meta.get("pulses_normalized", False)
             sir2 = meta.get("new_sir2") or None
         else:
-            pre_process_result_label.config(text=f"Falha no processamento dos dados")
+            self.status.configure(text=f"Falha no processamento dos dados")
             return
 
         # duração total (soma dos ticks * 1.6 µs)
@@ -328,45 +374,43 @@ class ComandosIRPage(ctk.CTkFrame):
         text1 = f"Frames detectados recebidos: {total_frames_received} Frames retornados: {returned_frames}  Frames iguais encontrados: {equal_frames_detected} "
         text2 = f"Pulsos Normalizados: {pulses_normalized_txt}  Pulsos preservados: {pairs_preserved}  Duração: {dur_str}"
         print(f"{text1} {text2}")
-        pre_process_result_label.config(text=f"{text1} {text2}")
-
-    # [+] helper: calcula zoom para “encaixar” a série no canvas
-    def _auto_zoom_to(self, sir2: str, fill: float = 0.9) -> None:
-        """
-        Ajusta o zoom para que a série sir,2 preencha ~fill da largura visível.
-        fill=0.9 => 90% da largura.
-        """
-        try:
-            if not sir2 or not sir2.startswith("sir,2,"):
-                return
-            parts = [p for p in sir2.strip()[6:].split(",") if p]
-            # tenta pulses a partir do índice 6 do corpo (tolerante a headers)
-            ints = []
-            for tok in parts[6:]:
-                try:
-                    ints.append(int(tok))
-                except Exception:
-                    break
-            total_ticks = sum(ints)
-            if total_ticks <= 0:
-                return
-
-            w = max(200, self.wave.winfo_width() or self.wave.winfo_reqwidth() or 400)
-            # margem ~20 px; preenche 'fill' da largura
-            px_per_tick = max(0.01, (fill * w - 20) / total_ticks)
-            self.wave.set_zoom(px_per_tick)
-        except Exception:
-            pass
+        self.status.configure(text=f"{text1} \n {text2}")
 
 
-    # [+] Atualiza o canvas uma única vez com o que existir nas três variáveis
+
     def _update_waveform(self):
-        self.wave.set_commands(
-            received=self.received_cmd_raw or "",
-            pre=self.ir_command_pre_process or "",
-            converted=self.ir_command_converted_plot or "",
-        )
-        # Auto-zoom prioriza PRE (se houver), senão RAW, senão CONVERTED
-        ref = self.ir_command_pre_process or self.received_cmd_raw or self.ir_command_converted_plot
-        if ref:
-            self._auto_zoom_to(ref)
+        """Reflete os três sinais no widget WaveformCanvas."""
+        try:
+            self.wave.set_commands(
+                received=self.received_cmd_raw or "",
+                pre=self.ir_command_pre_process or "",
+                converted=self.ir_command_converted_plot or "",
+            )
+        except Exception as e:
+            print("update waveform error:", e)
+
+
+
+
+    # ---------------------- ZOOM E PAN ------------------
+    # ---- Zoom/Pan (mesmos nomes e papel do learner) ----
+    # ----------------------------------------------------
+    def _on_zoom_changed(self, val):
+        """Atualiza a escala horizontal do WaveformCanvas e preserva a posição de pan."""
+        try:
+            z = max(0.001, float(val))
+        except Exception:
+            z = 0.05
+        # lembrar a posição atual antes do redraw
+        try:
+            first, _last = self.wave.xview()
+        except Exception:
+            first = float(self.pan_var.get() or 0.0)
+
+        self.x_scale_var.set(z)
+        self.wave.set_zoom(z)  # isto dispara redraw e recalcula a scrollregion
+
+        # reposiciona o pan na mesma fração após mudar o zoom
+        self.wave.xview_moveto(first)
+
+

@@ -9,8 +9,6 @@
 #
 # Mantém funções no topo e constantes no fim, como solicitado.
 
-from tkinter import ttk
-import tkinter as tk
 import customtkinter as ctk
 
 
@@ -78,7 +76,7 @@ class ButtonTagsWidget(ctk.CTkFrame):
     (select acima, filtros abaixo).
     """
 
-    def __init__(self, parent, on_change=None, width_combobox: int = 22):
+    def __init__(self, parent, on_change=None, combo_width=180, cols=3, checkbox_size=16, font_size=12):
         super().__init__(parent, fg_color="transparent")
         self._on_change_cb = on_change
 
@@ -86,37 +84,52 @@ class ButtonTagsWidget(ctk.CTkFrame):
         lbl = ctk.CTkLabel(self, text="Button Tag:")
         lbl.grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4))
 
-        self._combo = ttk.Combobox(self, values=list(ButtonTags.BUTTON_TAGS),
-                                   width=width_combobox, state="readonly")
-        self._combo.grid(row=0, column=1, sticky="ew", padx=(0, 0), pady=(0, 4))
+        self._combo = ctk.CTkComboBox(
+            self,
+            values=list(ButtonTags.BUTTON_TAGS),
+            width=combo_width,                    # pixels
+            state="readonly",
+            command=lambda _choice=None: self._notify_change()
+        )
+        self._combo.grid(row=0, column=1, sticky="w", padx=(0, 0), pady=(0, 4))  # não expande
+
         if ButtonTags.BUTTON_TAGS:
-            self._combo.current(0)
-        self._combo.bind("<<ComboboxSelected>>", self._notify_change)
+            self._combo.set(ButtonTags.BUTTON_TAGS[0])
 
         # --- Linha 1+: filtros empilhando em múltiplas colunas (quebra natural) ---
         self._filter_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self._filter_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-        for i in range(4):  # 4 colunas deixam quebrar em 2–3 linhas conforme largura
-            self._filter_frame.grid_columnconfigure(i, weight=1)
+        self._filter_frame.grid(row=1, column=0, columnspan=2, sticky="w")
+        for i in range(cols):                    # N colunas fixas, não expansivas
+            self._filter_frame.grid_columnconfigure(i, weight=0)
+        self._chk_font = ctk.CTkFont(size=font_size)
 
         # Vars
-        self.var_comuns  = tk.BooleanVar(value=True)
-        self.var_outros  = tk.BooleanVar(value=False)
-        self.var_todos   = tk.BooleanVar(value=True)
+        self.var_comuns  = ctk.BooleanVar(value=True)
+        self.var_outros  = ctk.BooleanVar(value=False)
+        self.var_todos   = ctk.BooleanVar(value=False)
 
-        self.var_ac = tk.BooleanVar(value=True)
-        self.var_tv = tk.BooleanVar(value=True)
-        self.var_rx = tk.BooleanVar(value=True)
-        self.var_md = tk.BooleanVar(value=True)
+        self.var_ac = ctk.BooleanVar(value=False)
+        self.var_tv = ctk.BooleanVar(value=False)
+        self.var_rx = ctk.BooleanVar(value=False)
+        self.var_md = ctk.BooleanVar(value=False)
 
         # Ordem: Comuns | AC | TV | Receiver | Midia | Outros | Todos
         r, c = 0, 0
         def add_chk(text, var, cmd):
             nonlocal r, c
-            cb = ctk.CTkCheckBox(self._filter_frame, text=text, variable=var, command=cmd)
-            cb.grid(row=r, column=c, sticky="w", padx=(0, 8), pady=(0, 4))
+            cb = ctk.CTkCheckBox(
+                self._filter_frame,
+                text=text,
+                variable=var,
+                command=cmd,
+                width=0,                          # não forçar 100px
+                checkbox_width=checkbox_size,
+                checkbox_height=checkbox_size,
+                font=self._chk_font
+            )
+            cb.grid(row=r, column=c, sticky="w", padx=(0, 6), pady=(0, 2))
             c += 1
-            if c >= 4:
+            if c >= cols:                         # 2 ou 3 por linha, ajustável
                 c = 0; r += 1
 
         add_chk("Comuns",   self.var_comuns,   self._apply_filter)
@@ -130,21 +143,18 @@ class ButtonTagsWidget(ctk.CTkFrame):
         # Inicializa lista conforme filtros atuais
         self._apply_filter()
 
-        # Expansão horizontal do combobox
-        self.grid_columnconfigure(1, weight=1)
-
     # ---------------- API externa ----------------
     def get_selected_tag(self) -> str:
         return (self._combo.get() or "").strip()
 
     def set_selected_tag(self, tag: str) -> None:
-        vals = list(self._combo["values"])
+        vals = list(self._combo.cget("values"))
         if tag in vals:
             self._combo.set(tag)
             self._notify_change()
 
     def get_values(self) -> list[str]:
-        return list(self._combo["values"])
+        return list(self._combo.cget("values"))
 
     def set_on_change(self, cb) -> None:
         self._on_change_cb = cb
@@ -194,14 +204,14 @@ class ButtonTagsWidget(ctk.CTkFrame):
             filtered = list(ButtonTags.BUTTON_TAGS)
 
         current = self._combo.get().strip()
-        self._combo["values"] = filtered
+        self._combo.configure(values=filtered)
 
         # mantém tag antiga se ainda existir; senão seleciona a primeira
         if current in filtered:
             self._combo.set(current)
         else:
             if filtered:
-                self._combo.current(0)
+                self._combo.set(filtered[0])
             else:
                 self._combo.set("")
 

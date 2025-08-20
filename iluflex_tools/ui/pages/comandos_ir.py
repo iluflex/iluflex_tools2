@@ -104,8 +104,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
         # Card: Conversão (linha 3)
         conv_content = dpc.make_card(leftpanel, "Conversão", 3)
-
-        self.tag_picker = ButtonTagsWidget(conv_content, on_change=None, width_combobox=22)
+        self.tag_picker = ButtonTagsWidget(conv_content, combo_width=160, cols=3, checkbox_size=14, font_size=12)
         self.tag_picker.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
 
         self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)

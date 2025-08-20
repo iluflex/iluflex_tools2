@@ -83,6 +83,8 @@ class ButtonTagsWidget(ctk.CTkFrame):
         self._dropdown = None        # CTkToplevel aberto
         self._values = list(BUTTON_TAGS)
         self._item_buttons = []  # <- NOVO: guarda os CTkButton dos itens do dropdown
+        self._root_click_bound = False   # <- NOVO: controla bind global
+        self._root_ref = None            # <- NOVO: guarda o toplevel raiz
 
         # ---- Linha 0: label + botão que abre o dropdown ----
         ctk.CTkLabel(self, text="Button Tag:").grid(row=0, column=0, sticky="w",
@@ -125,12 +127,12 @@ class ButtonTagsWidget(ctk.CTkFrame):
         # Vars
         self.var_comuns  = ctk.BooleanVar(value=True)
         self.var_outros  = ctk.BooleanVar(value=False)
-        self.var_todos   = ctk.BooleanVar(value=True)
+        self.var_todos   = ctk.BooleanVar(value=False)
 
-        self.var_ac = ctk.BooleanVar(value=True)
-        self.var_tv = ctk.BooleanVar(value=True)
-        self.var_rx = ctk.BooleanVar(value=True)
-        self.var_md = ctk.BooleanVar(value=True)
+        self.var_ac = ctk.BooleanVar(value=False)
+        self.var_tv = ctk.BooleanVar(value=False)
+        self.var_rx = ctk.BooleanVar(value=False)
+        self.var_md = ctk.BooleanVar(value=False)
 
         # Ordem / criação
         r = c = 0
@@ -240,8 +242,8 @@ class ButtonTagsWidget(ctk.CTkFrame):
         self._dropdown = ctk.CTkToplevel(self)
         self._dropdown.overrideredirect(True)
         self._dropdown.attributes("-topmost", True)
-        # fecha com ESC (mas não em FocusOut, para poder clicar nos filtros)
-        self._dropdown.bind("<Escape>", lambda e: self._close_dropdown())
+        self._dropdown.bind("<Escape>", lambda e: self._close_dropdown())  # ESC para fechar
+        self._dropdown.bind("<FocusOut>", lambda e: self.after(20, self._close_if_focus_outside))
 
         # posiciona logo abaixo do botão
         self._dropdown.update_idletasks()
@@ -271,20 +273,22 @@ class ButtonTagsWidget(ctk.CTkFrame):
         for w in (self._dropdown, self._scroll):
             w.bind("<Up>",     self._on_key_up)
             w.bind("<Down>",   self._on_key_down)
-            w.bind("<Prior>",  self._on_page_up)   # PageUp
-            w.bind("<Next>",   self._on_page_down) # PageDown
+            w.bind("<Prior>",  self._on_page_up)   # PgUp
+            w.bind("<Next>",   self._on_page_down) # PgDn
             w.bind("<Home>",   self._on_home)
             w.bind("<End>",    self._on_end)
             w.bind("<Return>", lambda e: self._choose(self._sel_var.get()))
 
-        # popula e foca
+        # popula, foca, rola e destaca o item atual
         self._fill_dropdown(self._values)
         self._dropdown.focus_force()
-
-        # rola e destaca o item atual
         idx = self._index_of_current()
         if idx >= 0:
             self.after(10, lambda: (self._highlight_item(idx), self._ensure_visible(idx)))
+
+        # bind global de clique pra fechar ao clicar fora
+        if not self._root_click_bound:
+            self._bind_global_click()
 
 
     def _fill_dropdown(self, values):
@@ -319,7 +323,6 @@ class ButtonTagsWidget(ctk.CTkFrame):
             self._highlight_item(cur)
 
 
-
     def _choose(self, value: str):
         self._sel_var.set(value)
         self._close_dropdown()
@@ -331,12 +334,14 @@ class ButtonTagsWidget(ctk.CTkFrame):
                 self._dropdown.destroy()
             except Exception:
                 pass
-
-            try:
-                self._select_btn.focus_set()
-            except Exception:
-                pass
             self._dropdown = None
+
+        # remove bind global e devolve foco
+        self._unbind_global_click()
+        try:
+            self._select_btn.focus_set()
+        except Exception:
+            pass
 
 
     def _index_of_current(self) -> int:
@@ -407,6 +412,77 @@ class ButtonTagsWidget(ctk.CTkFrame):
     def _on_end(self, event=None):
         self._select_index(len(self._values) - 1)
         return "break"
+
+    def _highlight_item(self, active_idx: int):
+        """Pinta o item ativo; limpa os demais."""
+        try:
+            for i, b in enumerate(self._item_buttons):
+                if i == active_idx:
+                    b.configure(fg_color=("#EDEFF3", "#3a3a3a"))  # selecionado
+                else:
+                    b.configure(fg_color=("white", "#2b2b2b"))      # normal
+        except Exception:
+            pass
+
+    def _is_ancestor(self, widget, ancestor) -> bool:
+        """Retorna True se 'ancestor' está na cadeia de pais de 'widget'."""
+        try:
+            w = widget
+            while w is not None:
+                if w is ancestor:
+                    return True
+                w = getattr(w, "master", None)
+        except Exception:
+            pass
+        return False
+
+    def _on_global_click(self, event):
+        """Fecha o dropdown ao clicar fora do seletor e do próprio dropdown."""
+        if not self._dropdown:
+            return
+        w = event.widget
+        # se clicou no próprio botão select ou dentro do dropdown, ignore
+        if w is self._select_btn or self._is_ancestor(w, self._dropdown):
+            return
+        # fora => fecha
+        self._close_dropdown()
+
+    def _bind_global_click(self):
+        """Fecha o dropdown ao clicar fora (bind no toplevel raiz)."""
+        try:
+            self._root_ref = self.winfo_toplevel()
+            # add="+" evita sobrescrever outros binds existentes
+            self._root_ref.bind("<Button-1>", self._on_global_click, add="+")
+            self._root_click_bound = True
+        except Exception:
+            pass
+
+    def _unbind_global_click(self):
+        """Remove o bind global (cuidado: remove todos os handlers dessa sequência)."""
+        try:
+            if self._root_click_bound and self._root_ref:
+                # Se você tiver outros binds globais em <Button-1>, troque por um 'overlay' (posso te passar)
+                self._root_ref.unbind("<Button-1>")
+        except Exception:
+            pass
+        finally:
+            self._root_click_bound = False
+            self._root_ref = None
+
+    def _close_if_focus_outside(self):
+        """Fecha o dropdown se o foco foi para fora do seletor e do próprio dropdown."""
+        if not self._dropdown:
+            return
+        try:
+            w = self.focus_get()
+            if w is None:
+                self._close_dropdown()
+                return
+            if (w is self._select_btn) or self._is_ancestor(w, self._dropdown) or self._is_ancestor(w, self):
+                return  # foco ainda 'dentro' → mantém aberto
+            self._close_dropdown()
+        except Exception:
+            self._close_dropdown()
 
 
 

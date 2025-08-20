@@ -76,39 +76,47 @@ class ComandosIRPage(ctk.CTkFrame):
 
         # Card: Pré-processamento (linha 2)
         pre_content = dpc.make_card(leftpanel, "Pré-processamento", 2)
-        # 1 elemento por linha: label em uma, entry na próxima
-        ctk.CTkLabel(pre_content, text="Pause (ms)").grid(
-            row=0, column=0, sticky="w", padx=0, pady=(0, 2)
-        )
-        self.pause_treshold_entry = ctk.CTkEntry(pre_content)
-        self.pause_treshold_entry.insert(0, "15")
-        self.pause_treshold_entry.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
 
-        ctk.CTkLabel(pre_content, text="Max Frames").grid(
-            row=2, column=0, sticky="w", padx=0, pady=(0, 2)
-        )
-        self.max_frames_entry = ctk.CTkEntry(pre_content)
-        self.max_frames_entry.insert(0, "3")
-        self.max_frames_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
+        self.pause_treshold_label = ctk.CTkLabel(pre_content, text="Pause (ms)")
+        self.pause_treshold_label.grid(row=0, column=0, sticky="w", padx=0, pady=(0, 2))
+        self.pause_treshold_entry = ctk.CTkEntry(pre_content, width=60)
+        self.pause_treshold_entry.insert(0, "40")
+        self.pause_treshold_entry.grid(row=0, column=0, sticky="e", padx=0, pady=(0, 8))
 
-        self.normalize_switch = ctk.CTkSwitch(pre_content, text="Normalize")
+        self.max_frames_label = ctk.CTkLabel(pre_content, text="Max Frames:")
+        self.max_frames_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2)        )
+        self.max_frames_cbox = ctk.CTkComboBox( pre_content, values=["1","2","3","4"], width=60)
+        self.max_frames_cbox.grid(row=1, column=0, sticky="e", padx=0, pady=(0, 8))
+
+        self.normalize_switch_label = ctk.CTkLabel(pre_content, text="Normalizar:")
+        self.normalize_switch_label.grid(row=2, column=0, sticky="w", padx=0, pady=(0, 2))
+        self.normalize_switch = ctk.CTkSwitch(pre_content, text="", width=60, command=self._process_from_raw)
         self.normalize_switch.select()
-        self.normalize_switch.grid(row=4, column=0, sticky="w", padx=0, pady=(0, 8))
+        self.normalize_switch.grid(row=2, column=0, sticky="e", padx=0, pady=(0, 8))
 
-        self.btn_pre = ctk.CTkButton(pre_content, text="Pré-processar", command=self._preprocess)
-        self.btn_pre.grid(row=5, column=0, sticky="ew", padx=0, pady=2)
+        self.btn_pre = ctk.CTkButton(pre_content, text="Pré-processar", command=self._process_from_raw)
+        self.btn_pre.grid(row=3, column=0, sticky="ew", padx=0, pady=2)
 
-        # Botão Copiar para Entrada (linha 6)
         self.btn_copiar = ctk.CTkButton(pre_content, text="Copiar para Entrada:", command=self._copiar_para_entrada)
-        self.btn_copiar.grid(row=6, column=0, sticky="ew", padx=0, pady=2)
+        self.btn_copiar.grid(row=4, column=0, sticky="ew", padx=0, pady=2)
+
+        # Bindings
+        self.max_frames_cbox.bind("<<ComboboxSelected>>", lambda e: self._process_from_raw())
+        self.max_frames_cbox.bind("<<ComboboxSelected>>", lambda e: self._process_from_raw())
+        self.max_frames_cbox.bind("<FocusOut>", lambda e: self._process_from_raw())
 
         # Card: Conversão (linha 3)
         conv_content = dpc.make_card(leftpanel, "Conversão", 3)
         self.tag_picker = ButtonTagsWidget(conv_content, combo_width=160, cols=3, checkbox_size=14, font_size=12)
         self.tag_picker.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
 
+        self.cmd_repeat_label = ctk.CTkLabel(conv_content, text="Repetições:")
+        self.cmd_repeat_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2)        )
+        self.cmd_repeat_cbox = ctk.CTkComboBox( conv_content, values=["1","2","3","4"], width=60)
+        self.cmd_repeat_cbox.grid(row=1, column=0, sticky="e", padx=0, pady=(0, 8))
+
         self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)
-        self.btn_conv.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 0))
+        self.btn_conv.grid(row=2, column=0, sticky="ew", padx=0, pady=(0, 0))
 
         # Card: Enviar comando (linha 4)
         send_content = dpc.make_card(leftpanel, "Enviar comando", 4)
@@ -194,25 +202,6 @@ class ComandosIRPage(ctk.CTkFrame):
         self.status.grid(row=7, column=0, sticky="ew", padx=10, pady=(0, 6))
 
     # --- Ações ---
-    def _capturar(self):
-        # aqui você pode pegar do hardware / socket; por enquanto usa received_cmd_raw
-        self.txt_raw.delete("1.0", "end")
-        self.txt_raw.insert("1.0", self.received_cmd_raw)
-        self.status.configure(text="Captura copiada.")
-
-    def _preprocess(self):
-        try:
-            pause = int(self.pause_treshold_entry.get() or 40)
-            frames = int(self.max_frames_entry.get() or 1)
-            norm = bool(self.normalize_switch.get())
-        except Exception:
-            pause, frames, norm = 15000, 3, True
-        src = self.txt_raw.get("1.0", "end").strip()
-        pre = self.ir.preprocess(src, pause, frames, norm)
-        self.txt_pre.delete("1.0", "end")
-        self.txt_pre.insert("1.0", pre)
-
-        self.status.configure(text="Pré-processo concluído.")
 
     def _convert(self):
         src = self.txt_pre.get("1.0", "end").strip() or self.txt_raw.get("1.0", "end").strip()
@@ -222,7 +211,6 @@ class ComandosIRPage(ctk.CTkFrame):
         self.txt_out.insert("1.0", f"[sir,3]\n{sir3}\n\n[sir,4]\n{sir4}\n")
         self.status.configure(text="Conversão concluída.")
 
-    # ---- ações ----
     def _send(self):
         msg = self.entry.get()
         if not msg:
@@ -274,15 +262,11 @@ class ComandosIRPage(ctk.CTkFrame):
                 self.txt_raw.insert(ctk.END, "\n".join(lines) + "\n")
             self.txt_raw.see(ctk.END)
             self.txt_raw.configure(state=ctk.DISABLED)
-            
-            if buffer.startswith("sir,2,"):
-                # guardar para outras etapas
-                self.received_cmd_raw = buffer
-            
-            self._process_raw_income(buffer)
+            # Processa dados recebidos.
+            self._parse_raw_income(buffer)
 
         
-    def _process_raw_income(self, message: str)-> None:    
+    def _parse_raw_income(self, message: str)-> None:    
         """ Recebe mensagens e faz o pre processamento. """
         # estados do learner
         if  message.startswith("RIR,LEARNER,ON"):
@@ -293,44 +277,47 @@ class ComandosIRPage(ctk.CTkFrame):
             self.learner_on = False
             self.learner_status_var.set(False)
         elif message.startswith("sir,2,"):
+
             # comando IR cru capturado
-            try:
-                # 1) Guarda recebido CRU exatamente como veio
-                # self.received_cmd_raw = message  # já foi feito.
-                # 2) Pré-processa a partir do CRU com parâmetros atuais
-                pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
-                if 1 <= pause_threshold_ms < 80:
-                    pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
-                else: pause_threshold = 40000
-                max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
-                normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
+            self.received_cmd_raw = message
+            self._process_from_raw()
 
-                normalizedCmd = IrCodeLib.preProcessIrCmd(message, pause_threshold, max_frames, normalize)
+    def _process_from_raw(self):
+        """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
+        if not self.received_cmd_raw:
+            self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.")
+            return
+        if not self.received_cmd_raw.startswith("sir,2,"):
+            self.status.configure(text= "Erro: dado de entrada não inválido (precisa começar com sir,2...).")
+            self.received_cmd_raw = ""
+            return
+        try:
+            pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
+            if 1 <= pause_threshold_ms < 80:
+                pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
+            else: pause_threshold = 40000
+            max_frames = int(self.max_frames_cbox.get()) if self.max_frames_cbox else 3
+            normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
+
+            normalizedCmd = IrCodeLib.preProcessIrCmd(self.received_cmd_raw, pause_threshold, max_frames, normalize)
+            
+            new_sir2 = normalizedCmd.get("new_sir2", "")
+            if new_sir2:
+                print("Reproces Pre-Process: Temos new_sir2")
+                self.txt_pre.delete("1.0", "end")
+                self.txt_pre.insert("1.0", new_sir2)
+
+                # [+] manter variável e atualizar o canvas com auto-zoom
+                self.ir_command_pre_process = new_sir2
+                #atualizar_grafico()
                 
-                sir2_str = normalizedCmd.get("new_sir2", "")
-                # 3) Espelha no editor/var e atualiza gráfico
-                if sir2_str:
-                    print("Pre-Process: Temos sir2")
-                    self.txt_pre.delete("1.0", "end")
-                    self.txt_pre.insert("1.0", sir2_str)
-
-                    # [+] manter variável e atualizar o canvas com auto-zoom
-                    self.ir_command_pre_process = sir2_str
-                    
-                    ### só para testes ##########################
-                    # self.ir_command_converted_plot = sir2_str
-
-                    #atualizar_grafico()
-                    self._update_waveform()
-                    self.update_preproc_overlay(normalizedCmd)
-                else:
-                    self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
-                    print("Captura inválida ou falha na conversão")
-            except Exception as conv_err:
-                #status_label.config(text=f"Erro conversão: {conv_err}", fg="red")
-                print(f"Erro conversão: {conv_err}")
-
-
+                self.update_preproc_overlay(normalizedCmd)
+            else:
+                self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
+        except Exception as e:
+            print("Pré-processamento", f"Erro ao reprocessar: {e}", fg="red")
+        finally:
+            self._update_waveform()
 
     # compatível com o mecanismo de mudar tema
     def on_theme_changed(self):
@@ -444,35 +431,3 @@ class ComandosIRPage(ctk.CTkFrame):
         self._reprocess_from_raw()
 
 
-    def _reprocess_from_raw(self):
-        """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
-        if not self.received_cmd_raw:
-            self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.")
-            return
-        try:
-            pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
-            if 1 <= pause_threshold_ms < 80:
-                pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
-            else: pause_threshold = 40000
-            max_frames = int(self.max_frames_entry.get()) if self.max_frames_entry else 3
-            normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
-
-            normalizedCmd = IrCodeLib.preProcessIrCmd(self.received_cmd_raw, pause_threshold, max_frames, normalize)
-            
-            new_sir2 = normalizedCmd.get("new_sir2", "")
-            if new_sir2:
-                print("Reproces Pre-Process: Temos new_sir2")
-                self.txt_pre.delete("1.0", "end")
-                self.txt_pre.insert("1.0", new_sir2)
-
-                # [+] manter variável e atualizar o canvas com auto-zoom
-                self.ir_command_pre_process = new_sir2
-                #atualizar_grafico()
-                
-                self.update_preproc_overlay(normalizedCmd)
-            else:
-                self.status.configure(text="Captura inválida ou falha na conversão", fg="orange")
-        except Exception as e:
-            print("Pré-processamento", f"Erro ao reprocessar: {e}")
-        finally:
-            self._update_waveform()

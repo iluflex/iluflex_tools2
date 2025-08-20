@@ -24,7 +24,7 @@ class MainApp(ctk.CTk):
         super().__init__()
         apply_theme() # fallback inicial (mantém comportamento atual)
         self.title("iLuFlex Tools")
-        self.geometry("900x700")
+        self.geometry("900x720")
         self.minsize(800, 500)
 
         self.settings = load_settings()

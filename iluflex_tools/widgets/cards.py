@@ -9,7 +9,7 @@ class DropDownCard(ctk.CTkFrame):
     @staticmethod
     def make_card(parent, title, row_index):
         card = ctk.CTkFrame(parent, corner_radius=6, border_width=1)
-        card.grid(row=row_index, column=0, sticky="ew", padx=0, pady=(0, 8))
+        card.grid(row=row_index, column=0, sticky="ew", padx=1, pady=(0, 8))
         card.grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(card, fg_color="transparent")
@@ -22,7 +22,7 @@ class DropDownCard(ctk.CTkFrame):
 
         arrow_var = ctk.StringVar(value="▼")  # ▼ aberto / ▶ fechado
         # placeholder inicial; será substituído após "content" existir
-        toggle_btn = ctk.CTkButton(header, textvariable=arrow_var, width=28)
+        toggle_btn = ctk.CTkButton(header, textvariable=arrow_var, width=24)
         toggle_btn.grid(row=0, column=1, sticky="e")
 
         content = ctk.CTkFrame(card, fg_color="transparent")

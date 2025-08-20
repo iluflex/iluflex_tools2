@@ -80,21 +80,20 @@ class ButtonTagsWidget(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self._on_change_cb = on_change
 
-        # --- Linha 0: label + Combobox ---
+        # --- Linha 0: label + OptionMenu (dropdown rolável) ---
         lbl = ctk.CTkLabel(self, text="Button Tag:")
         lbl.grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4))
 
-        self._combo = ctk.CTkComboBox(
+        self._option = ctk.CTkOptionMenu(
             self,
-            values=list(ButtonTags.BUTTON_TAGS),
-            width=combo_width,                    # pixels
-            state="readonly",
-            command=lambda _choice=None: self._notify_change()
+            values=list(ButtonTags.BUTTON_TAGS),  # mesma lista
+            width=combo_width,                    # pixels, mantém estreito
+            anchor="w",
+            command=lambda _sel=None: self._notify_change()
         )
-        self._combo.grid(row=0, column=1, sticky="w", padx=(0, 0), pady=(0, 4))  # não expande
-
+        self._option.grid(row=0, column=1, sticky="w", padx=(0, 0), pady=(0, 4))
         if ButtonTags.BUTTON_TAGS:
-            self._combo.set(ButtonTags.BUTTON_TAGS[0])
+            self._option.set(ButtonTags.BUTTON_TAGS[0])
 
         # --- Linha 1+: filtros empilhando em múltiplas colunas (quebra natural) ---
         self._filter_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -145,16 +144,16 @@ class ButtonTagsWidget(ctk.CTkFrame):
 
     # ---------------- API externa ----------------
     def get_selected_tag(self) -> str:
-        return (self._combo.get() or "").strip()
+        return (self._option.get() or "").strip()
 
     def set_selected_tag(self, tag: str) -> None:
-        vals = list(self._combo.cget("values"))
+        vals = list(self._option.cget("values"))
         if tag in vals:
-            self._combo.set(tag)
+            self._option.set(tag)
             self._notify_change()
 
     def get_values(self) -> list[str]:
-        return list(self._combo.cget("values"))
+        return list(self._option.cget("values"))
 
     def set_on_change(self, cb) -> None:
         self._on_change_cb = cb
@@ -203,17 +202,14 @@ class ButtonTagsWidget(ctk.CTkFrame):
         if not filtered:
             filtered = list(ButtonTags.BUTTON_TAGS)
 
-        current = self._combo.get().strip()
-        self._combo.configure(values=filtered)
+        current = self._option.get().strip()
+        self._option.configure(values=filtered)
 
         # mantém tag antiga se ainda existir; senão seleciona a primeira
         if current in filtered:
-            self._combo.set(current)
+            self._option.set(current)
         else:
-            if filtered:
-                self._combo.set(filtered[0])
-            else:
-                self._combo.set("")
+            self._option.set(filtered[0] if filtered else "")
 
         self._notify_change()
 

@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from PIL import Image
 import os
+from iluflex_tools.widgets.page_title import PageTitle
 
 class DashboardPage(ctk.CTkFrame):
     """
@@ -31,10 +32,10 @@ class DashboardPage(ctk.CTkFrame):
         self._build_logo()
 
         # título "ATALHOS"
-        self.shortcuts_title = ctk.CTkLabel(
-            self, text="ATALHOS", text_color="#111827", bg_color="#F5F6F8"
+        self.shortcuts_title = PageTitle(
+            self, "ATALHOS", row=3, column=0, pady=(6, 6), sticky="n", padx=0
         )
-        self.shortcuts_title.grid(row=3, column=0, sticky="n", pady=(6, 6))
+        self.shortcuts_title.configure(text_color="#111827", bg_color="#F5F6F8")
 
         # container dos botões
         self.grid_wrap = ctk.CTkFrame(self, fg_color="#F5F6F8")

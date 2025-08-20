@@ -3,6 +3,7 @@ from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.cards import DropDownCard as dpc
 from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.widgets.buttontags import ButtonTagsWidget
+from iluflex_tools.widgets.page_title import PageTitle
 
 class ComandosIRPage(ctk.CTkFrame):
     """
@@ -44,12 +45,11 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _build(self):
         # Título
-        self.pagetitle = ctk.CTkLabel(
+        self.pagetitle = PageTitle(
             self,
-            text="IR Learner - Captura de comandos de Infra Vermelho (IR)",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            "IR Learner - Captura de comandos de Infra Vermelho (IR)",
+            columnspan=2,
         )
-        self.pagetitle.grid(row=0, column=0, columnspan=2, padx=12, pady=6, sticky="w")
 
         # Painéis
         leftpanel = ctk.CTkFrame(self)

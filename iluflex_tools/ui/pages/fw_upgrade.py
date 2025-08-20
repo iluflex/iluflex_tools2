@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import filedialog
+from iluflex_tools.widgets.page_title import PageTitle
 
 class FWUpgradePage(ctk.CTkFrame):
     def __init__(self, master, run_ota):
@@ -8,12 +9,17 @@ class FWUpgradePage(ctk.CTkFrame):
         self._build()
 
     def _build(self):
-        ctk.CTkLabel(self, text="Atualização de Firmware", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(10,6))
-        row = ctk.CTkFrame(self); row.pack(pady=10, fill="x")
-        self.path_entry = ctk.CTkEntry(row); self.path_entry.pack(side="left", padx=6, expand=True, fill="x")
+        PageTitle(self, "Atualização de Firmware")
+        row = ctk.CTkFrame(self)
+        row.grid(row=1, column=0, pady=10, padx=10, sticky="ew")
+        self.path_entry = ctk.CTkEntry(row)
+        self.path_entry.pack(side="left", padx=6, expand=True, fill="x")
         ctk.CTkButton(row, text="Selecionar .frw", command=self._pick).pack(side="left", padx=6)
-        ctk.CTkButton(self, text="Atualizar", command=self._run).pack(pady=6)
-        self.log = ctk.CTkTextbox(self, height=160); self.log.pack(fill="both", expand=True, padx=6, pady=6)
+        ctk.CTkButton(self, text="Atualizar", command=self._run).grid(row=2, column=0, pady=6)
+        self.log = ctk.CTkTextbox(self, height=160)
+        self.log.grid(row=3, column=0, padx=6, pady=6, sticky="nsew")
+        self.grid_rowconfigure(3, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
     def _pick(self):
         p = filedialog.askopenfilename(title="Escolher firmware", filetypes=[("Firmware","*.frw"), ("Todos","*.*")])

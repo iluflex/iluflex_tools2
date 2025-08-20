@@ -3,6 +3,7 @@ import customtkinter as ctk
 from iluflex_tools.widgets.table_tree import ColumnToggleTree
 from iluflex_tools.core.services import ConnectionService
 from iluflex_tools.widgets.status_led import StatusLed
+from iluflex_tools.widgets.page_title import PageTitle
 
 TABLE_FONT_SIZE = 12
 
@@ -27,9 +28,7 @@ class ConexaoPage(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
-        ctk.CTkLabel(self, text="Conexão de Rede", font=ctk.CTkFont(size=18, weight="bold")).grid(
-            row=0, column=0, columnspan=3, padx=10, pady=(10, 12), sticky="w"
-        )
+        PageTitle(self, "Conexão de Rede", columnspan=3)
 
         conn_frame = ctk.CTkFrame(self)
         conn_frame.grid(row=1, column=0, columnspan=3, padx = 6, pady=10, sticky="ew")

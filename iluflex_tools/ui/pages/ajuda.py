@@ -1,7 +1,11 @@
 import customtkinter as ctk
+from iluflex_tools.widgets.page_title import PageTitle
+
 
 class AjudaPage(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
-        ctk.CTkLabel(self, text='Ajuda', font=ctk.CTkFont(size=18, weight='bold')).pack(pady=12, anchor='w', padx=10)
-        ctk.CTkLabel(self, text='(conteúdo a implementar)').pack(pady=6)
+        PageTitle(self, "Ajuda")
+        ctk.CTkLabel(self, text="(conteúdo a implementar)").grid(
+            row=1, column=0, padx=12, pady=6, sticky="w"
+        )

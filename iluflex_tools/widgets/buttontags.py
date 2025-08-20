@@ -82,6 +82,7 @@ class ButtonTagsWidget(ctk.CTkFrame):
         self._item_height = int(item_height)                  # NOVO
         self._dropdown = None        # CTkToplevel aberto
         self._values = list(BUTTON_TAGS)
+        self._item_buttons = []  # <- NOVO: guarda os CTkButton dos itens do dropdown
 
         # ---- Linha 0: label + botão que abre o dropdown ----
         ctk.CTkLabel(self, text="Button Tag:").grid(row=0, column=0, sticky="w",
@@ -104,6 +105,15 @@ class ButtonTagsWidget(ctk.CTkFrame):
             corner_radius=6,
         )
         self._select_btn.grid(row=0, column=1, sticky="w", padx=(0, 0), pady=(0, 4))
+
+        # Navegação por teclado quando o foco está no "select"
+        self._select_btn.bind("<Up>",   self._on_key_up)
+        self._select_btn.bind("<Down>", self._on_key_down)
+        self._select_btn.bind("<Prior>", self._on_page_up)   # PageUp
+        self._select_btn.bind("<Next>",  self._on_page_down) # PageDown
+        self._select_btn.bind("<Home>",  self._on_home)
+        self._select_btn.bind("<End>",   self._on_end)
+        self._select_btn.bind("<Return>", lambda e: self._toggle_dropdown())
 
         # ---- Linha 1+: filtros compactos ----
         self._filter_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -257,27 +267,43 @@ class ButtonTagsWidget(ctk.CTkFrame):
         )
         self._scroll.pack(fill="both", expand=True, padx=2, pady=2)
 
+        # binds de navegação de teclado também no popup
+        for w in (self._dropdown, self._scroll):
+            w.bind("<Up>",     self._on_key_up)
+            w.bind("<Down>",   self._on_key_down)
+            w.bind("<Prior>",  self._on_page_up)   # PageUp
+            w.bind("<Next>",   self._on_page_down) # PageDown
+            w.bind("<Home>",   self._on_home)
+            w.bind("<End>",    self._on_end)
+            w.bind("<Return>", lambda e: self._choose(self._sel_var.get()))
+
         # popula e foca
         self._fill_dropdown(self._values)
         self._dropdown.focus_force()
+
+        # rola e destaca o item atual
+        idx = self._index_of_current()
+        if idx >= 0:
+            self.after(10, lambda: (self._highlight_item(idx), self._ensure_visible(idx)))
 
 
     def _fill_dropdown(self, values):
         # limpa itens antigos
         for w in self._scroll.winfo_children():
             w.destroy()
+        self._item_buttons = []
 
-        # itens "flat" (parecem texto), compactos
-        for v in values:
+        # itens “flat”, com hover e clique
+        for idx, v in enumerate(values):
             btn = ctk.CTkButton(
                 self._scroll,
                 text=v,
                 width=self._combo_width - 4,
                 height=self._item_height,
                 anchor="w",
-                fg_color=("white", "#2b2b2b"),   # fundo igual ao dropdown
-                text_color=("black", "white"),   # PRETO no claro / BRANCO no escuro
-                hover=False,
+                fg_color=("white", "#2b2b2b"),   # fundo
+                text_color=("black", "white"),   # texto
+                hover=True,
                 border_width=0,
                 corner_radius=0,
                 font=self._item_font,
@@ -285,6 +311,13 @@ class ButtonTagsWidget(ctk.CTkFrame):
                 command=lambda _v=v: self._choose(_v),
             )
             btn.pack(fill="x", padx=2, pady=0)
+            self._item_buttons.append(btn)
+
+        # aplica highlight ao item atual, se existir
+        cur = self._index_of_current()
+        if 0 <= cur < len(self._item_buttons):
+            self._highlight_item(cur)
+
 
 
     def _choose(self, value: str):
@@ -298,7 +331,83 @@ class ButtonTagsWidget(ctk.CTkFrame):
                 self._dropdown.destroy()
             except Exception:
                 pass
+
+            try:
+                self._select_btn.focus_set()
+            except Exception:
+                pass
             self._dropdown = None
+
+
+    def _index_of_current(self) -> int:
+        try:
+            return self._values.index(self._sel_var.get())
+        except Exception:
+            return -1
+
+    def _select_index(self, idx: int, announce: bool = True, ensure_visible: bool = True):
+        if not self._values:
+            self._sel_var.set("")
+            return
+        idx = max(0, min(idx, len(self._values) - 1))
+        self._sel_var.set(self._values[idx])
+        if self._dropdown and ensure_visible:
+            self._highlight_item(idx)   # NOVO
+            self._ensure_visible(idx)
+        if announce:
+            self._notify_change()
+
+    def _ensure_visible(self, idx: int):
+        """Tenta rolar o dropdown para tornar o item idx visível."""
+        try:
+            # child alvo
+            child = self._scroll.winfo_children()[idx]
+            self._scroll.update_idletasks()
+            y = child.winfo_y()
+            # tenta usar a canvas interna do ScrollableFrame (API interna, por isso try/except)
+            canvas = getattr(self._scroll, "_parent_canvas", None)
+            if canvas is not None and hasattr(canvas, "bbox") and hasattr(canvas, "yview_moveto"):
+                bbox = canvas.bbox("all")
+                if bbox:
+                    total_h = max(1, bbox[3] - bbox[1])
+                    frac = max(0.0, min(1.0, y / total_h))
+                    canvas.yview_moveto(frac)
+        except Exception:
+            pass
+
+    # ---- Teclas ----
+    def _on_key_down(self, event=None):
+        i = self._index_of_current()
+        if i < 0: i = -1
+        self._select_index(i + 1)
+        return "break"
+
+    def _on_key_up(self, event=None):
+        i = self._index_of_current()
+        if i < 0: i = len(self._values)
+        self._select_index(i - 1)
+        return "break"
+
+    def _on_page_down(self, event=None):
+        i = self._index_of_current()
+        if i < 0: i = -1
+        self._select_index(i + 10)
+        return "break"
+
+    def _on_page_up(self, event=None):
+        i = self._index_of_current()
+        if i < 0: i = len(self._values)
+        self._select_index(i - 10)
+        return "break"
+
+    def _on_home(self, event=None):
+        self._select_index(0)
+        return "break"
+
+    def _on_end(self, event=None):
+        self._select_index(len(self._values) - 1)
+        return "break"
+
 
 
 # ----------------- Constantes (no fim) -----------------

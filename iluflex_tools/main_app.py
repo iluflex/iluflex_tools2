@@ -3,7 +3,7 @@ from tkinter import ttk
 
 from iluflex_tools.theming.theme import apply_theme
 from iluflex_tools.core.state import AppState
-from iluflex_tools.core.services import ConnectionService, OtaService, IrService, NetworkService
+from iluflex_tools.core.services import ConnectionService, OtaService, NetworkService
 from iluflex_tools.core.settings import load_settings, save_settings
 from iluflex_tools.ui.header import Header
 from iluflex_tools.ui.sidebar import Sidebar
@@ -41,7 +41,6 @@ class MainApp(ctk.CTk):
         )
         self.conn = ConnectionService()
         self.ota = OtaService()
-        self.ir = IrService()
         self.net = NetworkService()
 
         self.grid_rowconfigure(1, weight=1)
@@ -81,7 +80,7 @@ class MainApp(ctk.CTk):
         # >>> alteração: passa conn também, para a página ouvir RX de RRF,10
         self.pages["gestao_dispositivos"] = GestaoDispositivosPage(self.content, conn=self.conn)
         self.pages["fw_upgrade"] = FWUpgradePage(self.content, run_ota=self.ota.run_fw_upgrade)
-        self.pages["comandos_ir"] = ComandosIRPage(self.content, ir_service=self.ir, conn=self.conn)
+        self.pages["comandos_ir"] = ComandosIRPage(self.content, conn=self.conn)
         self.pages["interface_programacao"] = InterfaceProgramacaoPage(self.content)
         self.pages["configurar_master"] = ConfigurarMasterPage(self.content)
         self.pages["preferencias"] = PreferenciasPage(

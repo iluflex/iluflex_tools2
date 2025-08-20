@@ -226,17 +226,6 @@ class OtaService:
         return f"OTA iniciado com {firmware_path}"
 
 
-class IrService:
-    def preprocess(self, raw_sir2: str, pause_us: int, max_frames: int, normalize: bool) -> str:
-        return "Resumo do pré-processo (stub)"
-
-    def to_sir3(self, data: str) -> str:
-        return "sir,3,... (stub)"
-
-    def to_sir4(self, data: str) -> str:
-        return "sir,4,... (stub)"
-
-
 # --------- Descoberta de dispositivos na rede (UDP broadcast) ---------
 
 class NetworkService:

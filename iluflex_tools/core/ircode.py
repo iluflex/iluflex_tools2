@@ -55,7 +55,7 @@ class IrCodeLib:
                 elif trimmed.startswith("sir,2"):
                     out = trimmed  # já está em Long; apenas replica
                     out = update_rep_field(out, rep)
-                    plot_data = out.copy()
+                    plot_data = out
                 else:
                     return {
                         "converted": "",

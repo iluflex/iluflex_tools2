@@ -1,4 +1,6 @@
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import filedialog, messagebox
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.cards import DropDownCard as dpc
 from iluflex_tools.core.ircode import IrCodeLib
@@ -31,7 +33,7 @@ class ComandosIRPage(ctk.CTkFrame):
         self.zoom_slider = None
 
         # comandos de IR guardados do Learner
-        self.received_cmd_raw = ""
+        self.ir_received_cmd_raw = ""
         self.ir_command_pre_process = ""
         self.ir_command_converterd = ""
         self.ir_command_converted_plot = ""
@@ -72,7 +74,7 @@ class ComandosIRPage(ctk.CTkFrame):
         )
 
         # Painéis
-        leftpanel = ctk.CTkFrame(self)
+        leftpanel = ctk.CTkScrollableFrame(self, width=210)
         leftpanel.grid(row=1, column=0, padx=(10, 6), pady=6, sticky="nsw")
 
         mainpanel = ctk.CTkFrame(self)
@@ -132,29 +134,37 @@ class ComandosIRPage(ctk.CTkFrame):
 
         # Card: Conversão (linha 3)
         conv_content = dpc.make_card(leftpanel, "Conversão", 3)
-        self.tag_picker = ButtonTagsWidget(conv_content, combo_width=160, cols=3, checkbox_size=14, font_size=12)
+        self.tag_picker = ButtonTagsWidget(conv_content, combo_width=120, cols=3, checkbox_size=14, font_size=12)
         self.tag_picker.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
 
         self.cmd_repeat_label = ctk.CTkLabel(conv_content, text="Repetições:")
-        self.cmd_repeat_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2)        )
+        self.cmd_repeat_label.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2))        
         self.cmd_repeat_cbox = ctk.CTkOptionMenu(conv_content, values=["1", "2", "3", "4"], width=60)
         self.cmd_repeat_cbox.grid(row=1, column=0, sticky="e", padx=0, pady=(0, 8))
 
+        self.cmd_channel_label = ctk.CTkLabel(conv_content, text="Canal IR:")
+        self.cmd_channel_label.grid(row=2, column=0, sticky="w", padx=0, pady=(0, 2))
+        self.cmd_channel_entry = ctk.CTkEntry(conv_content, width=60)        
+        self.cmd_channel_entry.grid(row=2, column=0, sticky="e", padx=0, pady=(0, 8))
+        self.cmd_channel_entry.insert(0, "1")
+
         self.cmd_type_label = ctk.CTkLabel(conv_content, text="Tipo:")
-        self.cmd_type_label.grid(row=2, column=0, sticky="w", padx=0, pady=(0, 2)        )
+        self.cmd_type_label.grid(row=3, column=0, sticky="w", padx=0, pady=(0, 2))
         self.cmd_type_cbox = ctk.CTkOptionMenu(conv_content, values=["Iluflex Short", "Iluflex Long"], width=130)
-        self.cmd_type_cbox.grid(row=2, column=0, sticky="e", padx=0, pady=(0, 8))
+        self.cmd_type_cbox.grid(row=3, column=0, sticky="e", padx=0, pady=(0, 8))
 
         self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir 2 3 ou 4)", command=self._convert)
-        self.btn_conv.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 2))
+        self.btn_conv.grid(row=4, column=0, sticky="ew", padx=0, pady=(0, 2))
 
-        # Card: Enviar comando (linha 4)
-        send_content = dpc.make_card(leftpanel, "Enviar comando", 4)
-        self.entry = ctk.CTkEntry(send_content, placeholder_text="Digite o comando a enviar...")
-        self.entry.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
-        ctk.CTkButton(send_content, text="Enviar", command=self._send).grid(
-            row=1, column=0, sticky="ew", padx=0, pady=(0, 0)
-        )
+        # Card: Enviar testar e utilidades (linha 4)
+        utils_content = dpc.make_card(leftpanel, "Finalizar", 4)
+        self.send_cmd_entry = ctk.CTkEntry(utils_content, placeholder_text="Digite o comando a enviar...")
+        self.send_cmd_entry.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 8))
+        ctk.CTkButton(utils_content, text="Enviar", command=self._send).grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 8))
+        ctk.CTkButton(utils_content, text="Testar convertido", command=self._send_converted).grid(row=2, column=0, sticky="ew", padx=0, pady=(0, 8))
+        ctk.CTkButton(utils_content, text="Salvar…", command=self._save_txt_out).grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 8))
+        ctk.CTkButton(utils_content, text="Limpar Tudo", command=self._clear_all, fg_color="red", hover_color="#A71313").grid(row=4, column=0, sticky="ew", padx=0, pady=(0, 8))
+        self.bind("<Control-s>", self._save_txt_out)
 
         # ========= MAINPANEL: textos e canvas =========
         self.CANVAS_H = 124          # altura fixa do gráfico
@@ -244,8 +254,9 @@ class ComandosIRPage(ctk.CTkFrame):
             cmd_repeat = int(self.cmd_repeat_cbox.get())
             cmd_type = self.cmd_type_cbox.get()
             buttonTag = self.tag_picker.get_selected_tag()
+            channel = int(self.cmd_channel_entry.get())
 
-            converted = IrCodeLib.convertIRCmd(sir, cmd_type, cmd_repeat)
+            converted = IrCodeLib.convertIRCmd(sir, cmd_type, cmd_repeat, channel)
 
             if DEBUG: print(f"converteu algo: {converted}")
 
@@ -272,17 +283,32 @@ class ComandosIRPage(ctk.CTkFrame):
         
 
     def _send(self):
-        msg = self.entry.get()
+        msg = self.send_cmd_entry.get()
         if not msg:
             return
         
         # mantém espaços; só normaliza quebras de linha
-        msg = msg.rstrip("\r\n") + "\r"
+        msgr = msg.rstrip("\r\n") + "\r"
 
-        ok = self.conn.send(msg)
+        if self.conn.send(msgr):
+            # comando enviado com sucesso
+            self.status.configure(text=f"Enviado: {msg}", text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"])
+            if DEBUG: print(f">> {repr(msg)}")  # log TX simples
+        else:
+            self.status.configure(text= "Erro no envio, tente conectar primeiro.", text_color="red")
+
+    def _send_converted(self):
+        msg = self.ir_command_converterd
+        if not msg:
+            return
+        
+        # mantém espaços; só normaliza quebras de linha
+        msgr = msg.rstrip("\r\n") + "\r"
+
+        ok = self.conn.send(msgr)
         if DEBUG: print(f">> {repr(msg)}")  # log TX simples
         if not ok:
-            self._append("[warn] não conectado; mensagem não enviada.\n")
+            self._append("[warn] não conectado; comando não enviado.\n")
 
     def _toggle_learner_status(self):
         """ Apenas envia o comando e o toggle faz na resposta"""
@@ -296,7 +322,21 @@ class ComandosIRPage(ctk.CTkFrame):
         except Exception:
             pass
 
-    def _clear(self):
+    def _clear_all(self):
+        """Limpa todas as entradas e variáveis de comandos."""
+        self.txt_pre.delete("1.0", "end")
+        self.txt_out.delete("1.0", "end")
+        self.txt_raw.configure(state=ctk.NORMAL)
+        self.txt_raw.delete("1.0", "end")
+        self.txt_raw.configure(state=ctk.DISABLED)
+
+        self.send_cmd_entry.delete(0, ctk.END)
+        self.ir_command_converted_plot = ""
+        self.ir_command_converterd = ""
+        self.ir_command_pre_process = ""
+        self.ir_received_cmd_raw = ""
+        self._update_waveform()
+
         self.status.configure(text="", text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"])
 
     def _max_frames_change(self, choice):
@@ -317,7 +357,7 @@ class ComandosIRPage(ctk.CTkFrame):
         buffer = str(buffer).strip()
         if typ == "rx" and buffer:
             # chegou dados, vamos colocar no campo 'Entrada'
-            self.received_cmd_raw = buffer
+            self.ir_received_cmd_raw = buffer
             self.txt_raw.configure(state=ctk.NORMAL)
             self.txt_raw.insert(ctk.END, buffer + "\n")
             # Mantém apenas as 10 últimas linhas (não altera conteúdo crú)
@@ -345,18 +385,18 @@ class ComandosIRPage(ctk.CTkFrame):
         elif message.startswith("sir,2,"):
 
             # comando IR cru capturado
-            self.received_cmd_raw = message
+            self.ir_received_cmd_raw = message
             self._process_from_raw()
 
     def _process_from_raw(self):
         """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
-        if DEBUG: print(f"raw = {self.received_cmd_raw}")
-        if not self.received_cmd_raw or self.received_cmd_raw == "":
+        if DEBUG: print(f"raw = {self.ir_received_cmd_raw}")
+        if not self.ir_received_cmd_raw or self.ir_received_cmd_raw == "":
             self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.", text_color="red")
             return
-        if not self.received_cmd_raw.startswith("sir,2,"):
+        if not self.ir_received_cmd_raw.startswith("sir,2,"):
             self.status.configure(text= "Erro: dado de entrada não inválido (precisa começar com sir,2...).", text_color="red")
-            self.received_cmd_raw = ""
+            self.ir_received_cmd_raw = ""
             return
         try:
             pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
@@ -366,7 +406,7 @@ class ComandosIRPage(ctk.CTkFrame):
             max_frames = int(self.max_frames_cbox.get()) if self.max_frames_cbox else 3
             normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
 
-            normalizedCmd = IrCodeLib.preProcessIrCmd(self.received_cmd_raw, pause_threshold, max_frames, normalize)
+            normalizedCmd = IrCodeLib.preProcessIrCmd(self.ir_received_cmd_raw, pause_threshold, max_frames, normalize)
             
             new_sir2 = normalizedCmd.get("new_sir2", "")
             if new_sir2:
@@ -443,7 +483,7 @@ class ComandosIRPage(ctk.CTkFrame):
         """Reflete os três sinais no widget WaveformCanvas."""
         try:
             self.wave.set_commands(
-                received=self.received_cmd_raw or "",
+                received=self.ir_received_cmd_raw or "",
                 pre=self.ir_command_pre_process or "",
                 converted=self.ir_command_converted_plot or "",
             )
@@ -491,7 +531,7 @@ class ComandosIRPage(ctk.CTkFrame):
             self.status.configure(text= "Erro: Apenas formato Long é aceito aqui (sir,2). Para sir,3/sir,4 use Converter → Iluflex Long.",text_color="red")
             return
         # Define a nova entrada crua EXATAMENTE como no editor (não adicionar/criar aqui)
-        self.received_cmd_raw = trimmed
+        self.ir_received_cmd_raw = trimmed
         # Atualiza campo de entrada com o comando copiado.
         self.txt_raw.configure(state=ctk.NORMAL)
         self.txt_raw.delete("1.0", ctk.END)
@@ -501,3 +541,37 @@ class ComandosIRPage(ctk.CTkFrame):
         self._reprocess_from_raw()
 
 
+
+
+    def _save_txt_out(self):
+        # Pega o texto do CTkTextbox (ou Text)
+        content = self.txt_out.get("1.0", "end-1c")
+        if not content.strip():
+            try:
+                self.status.configure(text="Nada para salvar.", text_color="orange")
+            except Exception:
+                pass
+            return
+
+        path = filedialog.asksaveasfilename(
+            title="Salvar comandos",
+            defaultextension=".txt",
+            filetypes=[("Arquivo de texto", "*.txt"), ("Todos os arquivos", "*.*")],
+            initialfile="comandos.txt"
+        )
+        if not path:
+            return
+
+        try:
+            # No Windows, o modo texto já grava \n como \r\n por padrão.
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            try:
+                self.status.configure(text=f"Salvo em: {path}", text_color=None)
+            except Exception:
+                pass
+        except Exception as ex:
+            try:
+                self.status.configure(text=f"Erro ao salvar: {ex}", text_color="red")
+            except Exception:
+                messagebox.showerror("Erro ao salvar", str(ex))

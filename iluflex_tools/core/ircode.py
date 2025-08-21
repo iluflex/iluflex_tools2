@@ -41,13 +41,14 @@ class IrCodeLib:
                     
 
     @staticmethod
-    def convertIRCmd(ircmd: str, tipo: str, repeat: int):
+    def convertIRCmd(ircmd: str, tipo: str, repeat: int, channel: int):
         """ Converte comandos de IR aceitando formatos sir,2 sir,3 e sir,4.
             tipo: 'Iluflex Long' ou 'Iluflex Short'
             repeat: número de repetições
         """
         trimmed = ircmd.strip()
         rep = repeat if (repeat is not None and repeat > 0 and repeat < 4) else 1
+        chan = channel if (repeat is not None and repeat > 0 and repeat < 127) else 1
         error = ""
         plot_data = ""
         out = ""
@@ -56,12 +57,12 @@ class IrCodeLib:
                 # Saída precisa ser sir,2
                 if trimmed.startswith("sir,3") or trimmed.startswith("sir,4"):
                     out = sir34tosir2(trimmed)
-                    out = update_rep_field(out, rep)
+                    out = update_rep_channel_fields(out, rep, chan)
                     plot_data = out
 
                 elif trimmed.startswith("sir,2"):
                     out = trimmed  # já está em Long; apenas replica
-                    out = update_rep_field(out, rep)
+                    out = update_rep_channel_fields(out, rep, chan)
                     plot_data = out
                 else:
                     return {
@@ -117,7 +118,7 @@ class IrCodeLib:
                         }
                     
                     out = converted.strip()
-                    out = update_rep_field(out, rep)  # só troca o header (campo 6), sem recompactar, para atualizar nr de repetições
+                    out = update_rep_channel_fields(out, rep, chan)  # só troca o header (campo 6), sem recompactar, para atualizar nr de repetições
                     # para o gráfico "convertido", reconstituímos sir,2
                     try:
                         plot_data = sir34tosir2(out).strip()
@@ -126,7 +127,7 @@ class IrCodeLib:
 
                 elif trimmed.startswith("sir,3") or trimmed.startswith("sir,4"):
                     out = trimmed  # já está em Short; apenas replica
-                    out = update_rep_field(out, rep)  # só troca o header (campo 6), sem recompactar, para atualizar nr de repetições
+                    out = update_rep_channel_fields(out, rep, chan)  # só troca o header (campo 6), sem recompactar, para atualizar nr de repetições
                     try:
                         plot_data = sir34tosir2(out).strip()
                     except Exception:
@@ -1211,7 +1212,7 @@ def sir2_to_us(t2: int) -> int:
     return round(t2 * 16 / 10)
 
 # ------------------------- EDITOR/CONVERSOR ---------------------------------
-def update_rep_field(cmd: str, rep: int) -> str:
+def update_rep_channel_fields(cmd: str, rep: int, channel: int) -> str:
     """Atualiza o campo 6 (Repeat) do header em sir,2/sir,3/sir,4 — sem alterar o restante."""
     if not cmd or not cmd.startswith("sir,"):
         return cmd
@@ -1225,6 +1226,7 @@ def update_rep_field(cmd: str, rep: int) -> str:
     parts = s.split(",")
     if len(parts) > 6 and parts[0] == "sir" and parts[1] in ("2", "3", "4"):
         parts[6] = str(rep)
+        parts[3] = str(channel)
         return ",".join(parts) + trailer
     return cmd
 

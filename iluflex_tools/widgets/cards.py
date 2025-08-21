@@ -8,7 +8,7 @@ class DropDownCard(ctk.CTkFrame):
     # Helper para criar "cards" colapsáveis
     @staticmethod
     def make_card(parent, title, row_index):
-        card = ctk.CTkFrame(parent, corner_radius=6, border_width=1)
+        card = ctk.CTkFrame(parent, corner_radius=6, border_width=2)
         card.grid(row=row_index, column=0, sticky="ew", padx=1, pady=(0, 8))
         card.grid_columnconfigure(0, weight=1)
 

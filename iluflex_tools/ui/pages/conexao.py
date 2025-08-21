@@ -5,6 +5,8 @@ from iluflex_tools.core.services import ConnectionService
 from iluflex_tools.widgets.status_led import StatusLed
 from iluflex_tools.widgets.page_title import PageTitle
 
+DEBUG = False
+
 TABLE_FONT_SIZE = 12
 
 class ConexaoPage(ctk.CTkFrame):
@@ -110,14 +112,14 @@ class ConexaoPage(ctk.CTkFrame):
         ip = self.ip_entry.get().strip()
         port = int(self.port_entry.get().strip() or 0)
         ok = bool(self._conn.connect(ip, port)) if self._conn is not None else False
-        print(f"Tentou conectar ok = {ok}")
+        if DEBUG: print(f"Tentou conectar ok = {ok}")
         try:
             if self.auto_reconnect.get():
                 self._conn.auto_reconnect()
             else:
                 self._conn.stop_auto_reconnect()
         except Exception as e:
-            print("Erro ao tentar reconectar:", e)
+            if DEBUG: print("Erro ao tentar reconectar:", e)
             pass
         self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
 
@@ -127,7 +129,7 @@ class ConexaoPage(ctk.CTkFrame):
         port = int(self.port_entry.get().strip() or 0)
         desired_auto = bool(self.auto_reconnect.get())
         if self._conn is None:
-            print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")
+            if DEBUG: print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")
             self.status.configure(text="Falha na conexão")
             return
         # evitar corrida: desliga auto enquanto troca de conexão (inclui duplo clique já conectado)
@@ -139,7 +141,7 @@ class ConexaoPage(ctk.CTkFrame):
         except Exception:
             pass
         ok = bool(self._conn.connect(ip, port))
-        print(f"[ConexaoPage] connect({ip}:{port}) -> ok={ok}")
+        if DEBUG: print(f"[ConexaoPage] connect({ip}:{port}) -> ok={ok}")
         # aplica estado desejado do switch após conectar (ou manter tentando, se falhou)
         try:
             if hasattr(self._conn, "enable_auto_reconnect"):
@@ -147,14 +149,14 @@ class ConexaoPage(ctk.CTkFrame):
             else:
                 (self._conn.auto_reconnect() if desired_auto else self._conn.stop_auto_reconnect())
         except Exception as e:
-            print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
+            if DEBUG: print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
         self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
 
 
 
     def _disconnect(self):
         if self._conn is None:
-            print("[ConexaoPage] _disconnect: self._conn é None")
+            if DEBUG: print("[ConexaoPage] _disconnect: self._conn é None")
             self.status.configure(text="Desconectado.")
             return
         # usuário pediu desconectar => NUNCA ficar tentando reconectar
@@ -173,7 +175,7 @@ class ConexaoPage(ctk.CTkFrame):
 
     def _on_toggle_auto(self):
         if self._conn is None:
-            print("[ConexaoPage] _on_toggle_auto: self._conn é None")
+            if DEBUG: print("[ConexaoPage] _on_toggle_auto: self._conn é None")
             return
         enabled = bool(self.auto_reconnect.get())
         # print(f"[ConexaoPage] toggle auto -> {enabled}")
@@ -183,7 +185,7 @@ class ConexaoPage(ctk.CTkFrame):
             else:
                 (self._conn.auto_reconnect() if enabled else self._conn.stop_auto_reconnect())
         except Exception as e:
-            print("[ConexaoPage] Erro ao alternar auto-reconnect:", e)
+            if DEBUG: print("[ConexaoPage] Erro ao alternar auto-reconnect:", e)
 
 
     def _buscar(self):

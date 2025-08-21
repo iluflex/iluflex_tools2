@@ -5,6 +5,8 @@ from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.widgets.buttontags import ButtonTagsWidget
 from iluflex_tools.widgets.page_title import PageTitle
 
+DEBUG = True
+
 class ComandosIRPage(ctk.CTkFrame):
     """
     - Campo 1: Capturado (sir,2)
@@ -143,7 +145,7 @@ class ComandosIRPage(ctk.CTkFrame):
         self.cmd_type_cbox = ctk.CTkOptionMenu(conv_content, values=["Iluflex Short", "Iluflex Long"], width=130)
         self.cmd_type_cbox.grid(row=2, column=0, sticky="e", padx=0, pady=(0, 8))
 
-        self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir,3/sir,4)", command=self._convert)
+        self.btn_conv = ctk.CTkButton(conv_content, text="Converter (sir 2 3 ou 4)", command=self._convert)
         self.btn_conv.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 2))
 
         # Card: Enviar comando (linha 4)
@@ -245,7 +247,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
             converted = IrCodeLib.convertIRCmd(sir, cmd_type, cmd_repeat)
 
-            print(f"converteu algo: {converted}")
+            if DEBUG: print(f"converteu algo: {converted}")
 
             err = converted.get("error")
 
@@ -278,7 +280,7 @@ class ComandosIRPage(ctk.CTkFrame):
         msg = msg.rstrip("\r\n") + "\r"
 
         ok = self.conn.send(msg)
-        print(f">> {repr(msg)}")  # log TX simples
+        if DEBUG: print(f">> {repr(msg)}")  # log TX simples
         if not ok:
             self._append("[warn] não conectado; mensagem não enviada.\n")
 
@@ -299,7 +301,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _max_frames_change(self, choice):
         maxf = self.max_frames_cbox.get()
-        print(f"max frames changed to {maxf} and choice is {choice}")
+        if DEBUG: print(f"max frames changed to {maxf} and choice is {choice}")
         self._process_from_raw()
         
 
@@ -348,7 +350,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
     def _process_from_raw(self):
         """Reexecuta o pré-processamento a partir do `raw_sir2_data` usando os parâmetros atuais."""
-        print(f"raw = {self.received_cmd_raw}")
+        if DEBUG: print(f"raw = {self.received_cmd_raw}")
         if not self.received_cmd_raw or self.received_cmd_raw == "":
             self.status.configure(text= "Erro: Nenhuma entrada capturada. Use 'Copiar para entrada' ou capture um comando.", text_color="red")
             return
@@ -368,7 +370,7 @@ class ComandosIRPage(ctk.CTkFrame):
             
             new_sir2 = normalizedCmd.get("new_sir2", "")
             if new_sir2:
-                print("Reproces Pre-Process: Temos new_sir2")
+                if DEBUG: print("Reproces Pre-Process: Temos new_sir2")
                 self.txt_pre.delete("1.0", "end")
                 self.txt_pre.insert("1.0", new_sir2)
 
@@ -377,10 +379,12 @@ class ComandosIRPage(ctk.CTkFrame):
                 
                 self.update_preproc_overlay(normalizedCmd)
             else:
-                self.status.configure(text="Captura inválida ou falha na conversão", text_color="orange")
+                self.status.configure(text=f"Captura inválida ou falha na conversão. {normalizedCmd.get("error", "")}", text_color="red")
+                self.ir_command_pre_process = ""
         except Exception as e:
-            print("Pré-processamento", f"Erro ao reprocessar: {e}")
-            self.status.configure(text=f"Erro ao reprocessar: {e}", text_color="red")
+            if DEBUG: print("Pré-processamento", f"Erro ao reprocessar: {e}")
+            self.status.configure(text=f"Erro ao processar: {e}", text_color="red")
+            self.ir_command_pre_process = ""
         finally:
             # atualizar gráfico do canvas
             self._update_waveform()
@@ -430,7 +434,7 @@ class ComandosIRPage(ctk.CTkFrame):
 
         text1 = f"Frames detectados recebidos: {total_frames_received} Frames retornados: {returned_frames}  Frames iguais encontrados: {equal_frames_detected} "
         text2 = f"Pulsos Normalizados: {pulses_normalized_txt}  Pulsos preservados: {pairs_preserved}  Duração: {dur_str}"
-        print(f"{text1} {text2}")
+        if DEBUG: print(f"{text1} {text2}")
         self.status.configure(text=f"{text1} \n {text2}", text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"])
 
 
@@ -444,7 +448,7 @@ class ComandosIRPage(ctk.CTkFrame):
                 converted=self.ir_command_converted_plot or "",
             )
         except Exception as e:
-            print("update waveform error:", e)
+            if DEBUG: print("update waveform error:", e)
 
 
 
@@ -481,10 +485,10 @@ class ComandosIRPage(ctk.CTkFrame):
         texto = self.txt_pre.get("1.0", "end-1c")  # preservar tal como está; não strip para manter finais se houver
         trimmed = str(texto).strip()
         if not trimmed:
-            self.status.configure(text="Erro: copiar para entrada falhou, campo vaziu !", color="red")
+            self.status.configure(text="Erro: copiar para entrada falhou, campo vazio !", text_color="red")
             return
         if not trimmed.startswith("sir,2,"):
-            self.status.configure(text= "Erro: Apenas formato Long é aceito aqui (sir,2). Para sir,3/sir,4 use Converter → Iluflex Long.",color="red")
+            self.status.configure(text= "Erro: Apenas formato Long é aceito aqui (sir,2). Para sir,3/sir,4 use Converter → Iluflex Long.",text_color="red")
             return
         # Define a nova entrada crua EXATAMENTE como no editor (não adicionar/criar aqui)
         self.received_cmd_raw = trimmed

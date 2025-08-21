@@ -21,6 +21,7 @@ import time
 import re
 
 TABLE_FONT_SIZE = 12
+DEBUG = False
 
 class GestaoDispositivosPage(ctk.CTkFrame):
     """Página de gestão de *dispositivos* (rede 485/mesh)."""
@@ -301,7 +302,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                     tags.append("dup_sid")
                 else:
                     tags.append("uniq_sid")
-                print(f"[gestao dispositivos._apply_row_colors] tags={tags} n = {n}")
+                if DEBUG: print(f"[gestao dispositivos._apply_row_colors] tags={tags} n = {n}")
                 tv.item(iid, tags=tuple(tags))
             except Exception:
                 continue
@@ -326,7 +327,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
             timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 120))
             if text.strip() == f"RRF,15,1,{timeout}":
-                print("vai atualizar em 15 seg")
+                if DEBUG: print("vai atualizar em 15 seg")
                 self.after(15000, self._on_click_atualizar)
             
             devices = parse_rrf10_lines(text)
@@ -347,7 +348,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         try:
             if getattr(self, "_discover_after", None):
                 try: self.after_cancel(self._discover_after)
-                except Exception as e: print(e); pass
+                except Exception as e: 
+                    if DEBUG: 
+                        print(e)
+                pass
                 self._discover_after = None
             self.discover_progress.set(0)
             self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
@@ -365,23 +369,23 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         
     def _on_toggle_auto_reconnect(self):
         if self.conn is None:
-            print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self.conn é None")
+            if DEBUG: print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self.conn é None")
             return
         enabled = bool(self.auto_reconnect.get())
-        # print(f"[ConexaoPage] toggle auto -> {enabled}")
+        # if DEBUG: print(f"[ConexaoPage] toggle auto -> {enabled}")
         try:
             if hasattr(self.conn, "enable_auto_reconnect"):
                 self.conn.enable_auto_reconnect(enabled)
             else:
                 (self.conn.auto_reconnect() if enabled else self.conn.stop_auto_reconnect())
         except Exception as e:
-            print("[GestaoDispositivosPage] Erro ao alternar auto-reconnect:", e)
+            if DEBUG: print("[GestaoDispositivosPage] Erro ao alternar auto-reconnect:", e)
 
 
 
     def _on_click_atualizar(self):
         """Solicita a lista completa e reseta realces."""
-        print("atualizar lista")
+        if DEBUG: print("atualizar lista")
         try:
             # limpa TODAS as tags (hover/edited/dup_sid/uniq_sid/last/...)
             if hasattr(self.table, "clear_all_tags"):
@@ -396,24 +400,24 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             if callable(self._send):
                 self._send("SRF,10,255\r")
             else:
-                print("no callable")
+                if DEBUG: print("no callable")
         except Exception as e:
-            print(["GestaoDispositivos Erro:", e])
+            if DEBUG: print(["GestaoDispositivos Erro:", e])
             pass
 
     def _on_click_discover(self):
         """Envia comando para dispositivos irem para rede mesh pública."""
         timeout = int(getattr(self._settings, "mesh_discovery_timeout_sec", 120))
-        print(f"Busca Dispositivos por {timeout} seg")
+        if DEBUG: print(f"Busca Dispositivos por {timeout} seg")
         try:
             self._dataset.clear()
             self.table.set_rows([])
             if callable(self._send):
                 self._send(f"SRF,15,1,{timeout}\r")
             else:
-                print("Erro não fez send SRF,15,1 ")
+                if DEBUG: print("Erro não fez send SRF,15,1 ")
         except Exception as e:
-            print("Procurar Dispositivos Error: ", e)
+            if DEBUG: print("Procurar Dispositivos Error: ", e)
 
         # reinicia contagem e barra de progresso
         if self._discover_after:
@@ -437,7 +441,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         try:
             self.conn.auto_reconnect()
         except Exception as e:
-            print("[Pagina Gestao Dispositivos] Erro ao ativar auto_reconnect", e)
+            if DEBUG: print("[Pagina Gestao Dispositivos] Erro ao ativar auto_reconnect", e)
             pass
 
 

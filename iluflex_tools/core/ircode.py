@@ -5,8 +5,15 @@ from typing import List
 # Configuracao
 PAUSE_THRESHOLD_US = 15000
 TOLERANCE = 0.2
-DEBUG = False
+DEBUG = True
 max_pause_before_cut = 0  # variável global
+
+class CompressError(Exception):
+    """Exceção mínima para reportar erros específicos de compressão (sir,4).
+    Mantém o código enxuto e permite captura no nível superior."""
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 class IrCodeLib:
 
@@ -22,7 +29,7 @@ class IrCodeLib:
             max_frames = max_frames if max_frames >= 1 and max_frames <= 4 else 3
 
             try: 
-                out = extract_optimized_frame(irCmd, pause_threshold, max_frames, normalize)
+                out = extract_optimized_frame(ircmd, pause_threshold, max_frames, normalize)
                 # sir2_str = out.get("new_sir2", "")
                 return out
             except Exception as conv_err:
@@ -50,7 +57,7 @@ class IrCodeLib:
                 if trimmed.startswith("sir,3") or trimmed.startswith("sir,4"):
                     out = sir34tosir2(trimmed)
                     out = update_rep_field(out, rep)
-                    plot_data = out.copy()
+                    plot_data = out
 
                 elif trimmed.startswith("sir,2"):
                     out = trimmed  # já está em Long; apenas replica
@@ -82,21 +89,31 @@ class IrCodeLib:
                             "plot_data": "",
                             "error": "Erro: Falha interna ao converter para pulsos"
                         }
-                    converted = None
-                    try:
-                        converted = compatibility_to_compressed(pulsos.copy())
-                    except Exception:
-                        converted = None
-                    if not converted:
-                        try:
-                            converted = CompatibilityToCompressII(pulsos)
-                        except Exception:
-                            converted = None
-                    if not converted:
+                    if pulsos[0] > (len(pulsos) - 6):
                         return {
                             "converted": "",
                             "plot_data": "",
-                            "error": "Error: Não foi possível compactar (sir,3/sir,4)."
+                            "error": f"Erro: Dados insuficientes para número de pulsos = {pulsos[0]} len pulsos = {len(pulsos)}"
+                        }
+                    converted = None
+                    try:
+                        converted = compatibility_to_compressed(pulsos.copy())
+                    except Exception as e:
+                        converted = None
+                        print(f"CompatibilityToCompressed exception:", e)
+                        error = e
+                    if not converted:
+                        try:
+                            converted = CompatibilityToCompressII(pulsos)
+                        except Exception as e:
+                            print(f"CompatibilityToCompressII exception:", e)
+                            error = e
+                            converted = None
+                    if not converted or not error == "":
+                        return {
+                            "converted": "",
+                            "plot_data": "",
+                            "error": f"Error: Não foi possível compactar (sir,3/sir,4). {error}"
                         }
                     
                     out = converted.strip()
@@ -127,6 +144,15 @@ class IrCodeLib:
                     "plot_data": plot_data,
                     "error": ""
                 }
+            
+        except Exception as e:
+            error = e
+            if DEBUG: print(f"Erro de exception: {error}")
+            return {
+                "converted": "",
+                "plot_data": "",
+                "error": f"Erro de exception: {error}"
+            }
 
         finally:
             pass
@@ -505,7 +531,10 @@ def add_bit_stateful(pulso: list[int], bit_pos: int, bit_state: int, word_store_
 # Converte pulsos em formato sir,3
 def compatibility_to_compressed(pulso: list[int]) -> str | int:
     if pulso[0] < 26:
-        return 0
+        raise CompressError("PULSE_COUNT_TOO_SMALL", f"Quantidade de pulsos < 26 (valor: {pulso[0]})")
+    
+    if pulso[8] < 2 or pulso[9] < 2:
+        raise CompressError("PULSE_TIME_TOO_SMALL", f"Tempo pulso muito curto < 2 (valores {pulso[8]}:{pulso[9]})")
 
     on0, off0 = pulso[8], pulso[9]
     cont_bit = 0
@@ -516,6 +545,9 @@ def compatibility_to_compressed(pulso: list[int]) -> str | int:
     on1 = off1 = 0
 
     for i in range(10, pulso[0] - 2, 2):
+        if pulso[i] < 2 or pulso[i+1] < 2:
+            raise CompressError("PULSE_TIME_TOO_SMALL", f"Tempo pulso muito curto < 2 (valor: {pulso[i]})")
+        
         p_on, p_off = pulso[i], pulso[i + 1]
         if (on0 - 5 <= p_on <= on0 + 5) and (off0 - 5 <= p_off <= off0 + 5):
             pos = add_bit_stateful(pulso, cont_bit, 0, word_store_map)
@@ -557,6 +589,9 @@ def compatibility_to_compressed(pulso: list[int]) -> str | int:
         buffer_str += chr(low_byte)
 
     for i in range(pulso_loc + 1, pulso_loc + 3):
+        if pulso[i] < 2:
+            raise CompressError("PULSE_TIME_TOO_SMALL", f"Tempo pulso muito curto < 2 (valor: {pulso[i]})")
+        
         buffer_str += "," + str(pulso[i])
 
     return buffer_str
@@ -567,7 +602,7 @@ def CompatibilityToCompressII(pulso: list[int]) -> str | int:
     # if (DEBUG): print(f"Pulsos recebidos ({pulso[0]}):", ",".join(map(str, pulso[0:])))
 
     if pulso[0] < 12:
-        return 0
+        raise CompressError("PULSE_COUNT_TOO_SMALL", f"Quantidade de pulsos < 12 (valor: {pulso[0]})")
 
     different_times_arr = [0] * 20
     number_of_different_times = 0
@@ -582,6 +617,9 @@ def CompatibilityToCompressII(pulso: list[int]) -> str | int:
     # Identify different pulse lengths
     # starting position 8 keep 2 first pulses and 2 last out
     for i in range(8, pulso[0] - 2):
+        if pulso[i] < 2:
+            raise CompressError("PULSE_TIME_TOO_SMALL", f"Tempo pulso muito curto < 2 (valor: {pulso[i]})")
+
         number_of_different_times += 1
         different_times_arr[number_of_different_times] = pulso[i]
         if (DEBUG): print(f"[DEBUG] Scan pulse {i}: {pulso[i]} at index {number_of_different_times}, array: {different_times_arr[:20]}")
@@ -651,6 +689,9 @@ def CompatibilityToCompressII(pulso: list[int]) -> str | int:
 
     # Last two pulses
     for i in range(pulso[0] - 2, pulso[0]):
+        if pulso[i] < 2:
+            raise CompressError("PULSE_TIME_TOO_SMALL", f"Tempo pulso muito curto < 2 (valor: {pulso[i]})")
+        
         out_buffer += f",{pulso[i]}"
 
     # add reference values to the end of command.
@@ -913,7 +954,7 @@ def extract_optimized_frame(sir2_str, pause_threshold , max_frames, normalize):
     if not sir2_str.startswith("sir,2,"):
         raise ValueError("Comando deve começar com 'sir,2,'")
 
-    print(f"pause_threshold: {pause_threshold} , max_frames: {max_frames}, normalize: {normalize}")
+    if DEBUG: print(f"pause_threshold: {pause_threshold} , max_frames: {max_frames}, normalize: {normalize}")
     prefix = "sir,2,"
     parts = sir2_str[len(prefix):].split(',')
     header_fields = parts[:6]  # tamanho, porta, id, periodo, repeat, offset
@@ -1003,7 +1044,7 @@ def sir34tosir2(sirin):
 
         #converter char payload em pulsos
         for ch in splited[10]:
-            print(f"char: {ch}")
+            #print(f"char: {ch}")
             charVal = ord(ch) # converte caractere em número ascii
             if (64 < charVal < 81 ): # caracteres maiúsculos
                 resultsir2 += f",{timearr[charVal - 65]}"
@@ -1014,7 +1055,7 @@ def sir34tosir2(sirin):
                 n = bytechar & 0xF  # garante só 4 bits
                 # extrai bits do nibble na sequencia dos tempos: b0,b1,b2,b3
                 for bit in (n & 1, (n >> 1) & 1, (n >> 2) & 1, (n >> 3) & 1):
-                    print(f"bit = {bit} que corresponde a {timearr[bit]}")
+                    #print(f"bit = {bit} que corresponde a {timearr[bit]}")
                     resultsir2 += f",{timearr[bit]}"
 
         # por fim, os dois pulsos finais

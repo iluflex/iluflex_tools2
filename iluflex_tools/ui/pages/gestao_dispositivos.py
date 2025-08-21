@@ -27,8 +27,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     def __init__(self, master, conn: ConnectionService, send_func=None):
         super().__init__(master)
-        self._conn = conn       # ConnectionService para ouvir RX
-        self._send = send_func or self._conn.send  # função para enviar comandos TCP
+        self.conn = conn       # ConnectionService para ouvir RX
+        self._send = send_func or self.conn.send  # função para enviar comandos TCP
         self._settings = load_settings()
 
         # controle da barra de progresso do botão "Procurar Dispositivos"
@@ -41,22 +41,44 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self._dataset: List[Dict] = []
         self._last_mac: str | None = None
 
+        # listener will be attached when the page is activated
+        self._listener_attached = False
+
         self._build()
 
-        # Inscrição nos eventos de RX
-        try:
-            if self._conn is not None:
-                self._conn.add_listener(self._on_conn_event)
-        except Exception:
-            pass
 
     def destroy(self):
         try:
-            if self._conn is not None:
-                self._conn.remove_listener(self._on_conn_event)
+            if self.conn is not None:
+                self.conn.remove_listener(self._on_conn_event)
         except Exception:
             pass
         return super().destroy()
+
+    # called by main_app.navigate when the page becomes visible
+    def on_page_activated(self):
+        """Chamar ao navegar para esta página para auto‑atualizar se conectado."""
+        if not self._listener_attached:
+            self.conn.add_listener(self._on_conn_event)
+            self._listener_attached = True
+        
+        self._maybe_autorefresh()        
+        # refletir estado real do serviço de reconecção
+        try:
+            if self.conn is not None and hasattr(self.conn, "is_auto_reconnect_enabled") and self.conn.is_auto_reconnect_enabled():
+                self.auto_reconnect.select()
+            else:
+                self.auto_reconnect.deselect()
+        except Exception:
+            self.auto_reconnect.deselect()
+
+    # called by main_app.navigate when the page is hidden
+    def on_page_deactivated(self):
+        if self._listener_attached:
+            try:
+                self.conn.remove_listener(self._on_conn_event)
+            finally:
+                self._listener_attached = False
 
     def _build(self):
         # Barra
@@ -74,7 +96,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         #self.auto_reconnect.pack(side="right", padx=6)
         # refletir estado real do serviço
         try:
-            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
+            if self.conn is not None and hasattr(self.conn, "is_auto_reconnect_enabled") and self.conn.is_auto_reconnect_enabled():
                 self.auto_reconnect.select()
             else:
                 self.auto_reconnect.deselect()
@@ -342,16 +364,16 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # ------------------------------------------------------------------
         
     def _on_toggle_auto_reconnect(self):
-        if self._conn is None:
-            print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self._conn é None")
+        if self.conn is None:
+            print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self.conn é None")
             return
         enabled = bool(self.auto_reconnect.get())
         # print(f"[ConexaoPage] toggle auto -> {enabled}")
         try:
-            if hasattr(self._conn, "enable_auto_reconnect"):
-                self._conn.enable_auto_reconnect(enabled)
+            if hasattr(self.conn, "enable_auto_reconnect"):
+                self.conn.enable_auto_reconnect(enabled)
             else:
-                (self._conn.auto_reconnect() if enabled else self._conn.stop_auto_reconnect())
+                (self.conn.auto_reconnect() if enabled else self.conn.stop_auto_reconnect())
         except Exception as e:
             print("[GestaoDispositivosPage] Erro ao alternar auto-reconnect:", e)
 
@@ -413,7 +435,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.auto_reconnect.select()
         
         try:
-            self._conn.auto_reconnect()
+            self.conn.auto_reconnect()
         except Exception as e:
             print("[Pagina Gestao Dispositivos] Erro ao ativar auto_reconnect", e)
             pass
@@ -456,9 +478,9 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         enabled = bool(self.auto_reconnect.get())
         try:
             if enabled:
-                self._conn.auto_reconnect()
+                self.conn.auto_reconnect()
             else:
-                self._conn.stop_auto_reconnect()
+                self.conn.stop_auto_reconnect()
         except Exception:
             pass
 
@@ -475,22 +497,11 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     #------------ Navegação para essa página ----------------
     def _maybe_autorefresh(self):
         try:
-            if getattr(self._conn, "connected", False):
+            if getattr(self.conn, "connected", False):
                 self._on_click_atualizar()
         except Exception:
             pass
 
-    def on_page_activated(self) -> None:
-        """Chamar ao navegar para esta página para auto‑atualizar se conectado."""
-        self._maybe_autorefresh()        
-        # refletir estado real do serviço de reconecção
-        try:
-            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
-                self.auto_reconnect.select()
-            else:
-                self.auto_reconnect.deselect()
-        except Exception:
-            self.auto_reconnect.deselect()
 
 
 

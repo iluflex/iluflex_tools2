@@ -58,6 +58,7 @@ class MainApp(ctk.CTk):
         self.content.grid_columnconfigure(0, weight=1)
 
         self.pages = {}
+        self._current_page = None
         self._mount_pages()
         # self._apply_global_table_font(nsize=10)  # Aplica fonte global para todas as tabelas não funciona
         self.navigate("dashboard")
@@ -96,13 +97,25 @@ class MainApp(ctk.CTk):
     def navigate(self, key: str):
         if key not in self.pages:
             return
-        self.pages[key].tkraise()
+
+        # desativa página atual, se aplicável
+        if self._current_page and self._current_page in self.pages:
+            current = self.pages[self._current_page]
+            if hasattr(current, "on_page_deactivated"):
+                try:
+                    current.on_page_deactivated()
+                except Exception:
+                    pass
+
+        # ativa nova página
+        page = self.pages[key]
+        page.tkraise()
         self.sidebar.set_active(key)
-        
-        if key == "gestao_dispositivos":
-            # dispara a mesma ação do botão, mas só se já estiver conectado
+        self._current_page = key
+
+        if hasattr(page, "on_page_activated"):
             try:
-                self.after(50, self.pages[key].on_page_activated)
+                self.after(50, page.on_page_activated)
             except Exception:
                 pass
 

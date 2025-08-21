@@ -18,7 +18,10 @@ class ComandosIRPage(ctk.CTkFrame):
         self.conn = conn
         
         # escuta eventos da conexão para receber dados.
-        self.conn.add_listener(self._on_conn_event)
+        # self.conn.add_listener(self._on_conn_event) isso deixa de existir aqui.
+
+        # listener will be attached when the page is activated
+        self._listener_attached = False
 
         # --- Controles de zoom/pan (espelhando o learner) ---
         self.x_scale_var = ctk.DoubleVar(value=0.005)  # pixels por tick (1 tick ≈ 1.6 µs)
@@ -42,6 +45,21 @@ class ComandosIRPage(ctk.CTkFrame):
         except Exception:
             pass
         return super().destroy()
+
+    # called by main_app.navigate when the page becomes visible
+    def on_page_activated(self):
+        if not self._listener_attached:
+            self.conn.add_listener(self._on_conn_event)
+            self._listener_attached = True
+
+    # called by main_app.navigate when the page is hidden
+    def on_page_deactivated(self):
+        if self._listener_attached:
+            try:
+                self.conn.remove_listener(self._on_conn_event)
+            finally:
+                self._listener_attached = False
+
 
     def _build(self):
         # Título

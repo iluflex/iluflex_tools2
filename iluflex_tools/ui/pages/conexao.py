@@ -68,6 +68,8 @@ class ConexaoPage(ctk.CTkFrame):
 
         # duplo clique: conecta no IP da linha
         self.table.tree.bind("<Double-1>", self._on_row_double_click)
+        # click na linha atualiza IP
+        self.table.tree.bind("<<TreeviewSelect>>", self._on_row_select)
         # sorting default by NAME
         try:
             self.table.set_auto_sort("NAME", ascending=True)
@@ -97,6 +99,22 @@ class ConexaoPage(ctk.CTkFrame):
             self.auto_reconnect.deselect()
 
     # ---- Ações ----
+            
+    def _on_row_select(self, _event=None):
+        row = self._get_selected_row()
+        if not row:
+            return
+        ip = (row.get("IP") or "").strip()
+        port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
+
+        if ip:
+            self.ip_entry.delete(0, "end")
+            self.ip_entry.insert(0, ip)
+            # valida porta também.
+            self.port_entry.delete(0, "end")
+            self.port_entry.insert(0, str(port))
+
+
     def _on_row_double_click(self, _event=None):
         row = self._get_selected_row()
         if not row:
@@ -114,17 +132,6 @@ class ConexaoPage(ctk.CTkFrame):
 
     def _connect(self):
         # Verifica se tem alguma linha selecionada.
-        row = self._get_selected_row()
-        if row:
-            ip = (row.get("IP") or "").strip()
-            port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
-
-            if ip:
-                self.ip_entry.delete(0, "end")
-                self.ip_entry.insert(0, ip)
-                # valida porta também.
-                self.port_entry.delete(0, "end")
-                self.port_entry.insert(0, str(port))
 
         ip = self.ip_entry.get().strip()
         port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)

@@ -1,11 +1,10 @@
 import customtkinter as ctk
-import tkinter as tk
 from tkinter import filedialog, messagebox
 from iluflex_tools.widgets.waveform_canvas import WaveformCanvas
 from iluflex_tools.widgets.cards import DropDownCard as dpc
-from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.widgets.buttontags import ButtonTagsWidget
 from iluflex_tools.widgets.page_title import PageTitle
+from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.core.validators import get_safe_int
 
 DEBUG = False

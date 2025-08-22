@@ -81,7 +81,7 @@ class ConnectionService:
         except Exception as e:
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             print(f"{ts} [CONNECT] falhou: {e}")
-            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"connect failed: {e}"})
+            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"connexão falhou: {e}"})
             self._sock = None
             self.connected = False
             return False
@@ -195,7 +195,7 @@ class ConnectionService:
         if not self.connected or not self._sock:
             print("[TX] não conectado.")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": "send while not connected"})
+            self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": "eviar sem conexão."})
             return False
         try:
             payload = data.encode("utf-8") if isinstance(data, str) else bytes(data)

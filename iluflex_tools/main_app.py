@@ -24,7 +24,7 @@ MENU_ITEMS = [
 #    ("ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade", "⬆"),
     ("COMANDOS IR", "comandos_ir", "📡"),
 #    ("INTERFACE DE PROGRAMAÇÃO", "interface_programacao", "🛠"),
-#    ("CONFIGURAR MASTER", "configurar_master", "⚙"),
+    ("CONFIGURAR MASTER", "configurar_master", "⚙"),
     ("PREFERÊNCIAS", "preferencias", "⚙️"),
     ("AJUDA", "ajuda", "❓"),
 ]
@@ -93,7 +93,7 @@ class MainApp(ctk.CTk):
         self.pages["fw_upgrade"] = FWUpgradePage(self.content, run_ota=self.ota.run_fw_upgrade)
         self.pages["comandos_ir"] = ComandosIRPage(self.content, conn=self.conn)
         self.pages["interface_programacao"] = InterfaceProgramacaoPage(self.content)
-        self.pages["configurar_master"] = ConfigurarMasterPage(self.content)
+        self.pages["configurar_master"] = ConfigurarMasterPage(self.content, conn=self.conn)
         self.pages["preferencias"] = PreferenciasPage(
             self.content,
             get_settings=lambda: self.settings,

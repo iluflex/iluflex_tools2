@@ -31,6 +31,7 @@ class ConnectionService:
         self._listener_lock = threading.Lock()
         self._auto_reconnect_enabled = False  # quando True, desconexões disparam auto‑reconnect
         self._rx_buffer = bytearray()
+        self._msg_timeout = 0.4 # 400 ms
 
     def get_is_connected(self):
         return self.connected
@@ -153,6 +154,7 @@ class ConnectionService:
         while not self._stop.is_set():
             try:
                 data = self._sock.recv(4096)
+                last_rx_time = time.monotonic()
                 if not data:
                     print("[RX] conexão encerrada pelo remoto")
                     break
@@ -181,13 +183,23 @@ class ConnectionService:
                     print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
                     self._emit({"type": "rx", "ts": ts, "remote": self._remote, "text": text, "raw": msg})
             except socket.timeout:
-                continue
+                pass
             except OSError:
                 break
             except Exception as e:
                 ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"rx error: {e}"})
                 break
+            
+            if self._rx_buffer and (time.monotonic() - last_rx_time) > self._msg_timeout:
+                msg = bytes(self._rx_buffer)
+                self._rx_buffer.clear()
+                ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                text = msg.decode("utf-8", errors="replace")
+                print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
+                self._emit({"type": "rx", "ts": ts, "remote": self._remote, "text": text, "raw": msg})
+                last_rx_time = time.monotonic()
+
         self.disconnect()
 
     # ---- envio ----

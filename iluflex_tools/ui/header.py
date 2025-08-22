@@ -37,18 +37,26 @@ class Header(ctk.CTkFrame):
 
     # ---- eventos da conexão ----
     def _on_conn_event(self, ev: dict):
+        print(f"[HEADER] Connect event => {ev}")
         typ = ev.get("type")
         ip, port = ev.get("remote", ("", 0))
         if typ == "connect":
             self.status_text.configure(text=f"Conectado a {ip}:{port}")
+
         elif typ == "reconnecting":
             self.status_text.configure(text=f"Reconectando... {ip}:{port}")
-        elif typ == "connecting":
+
+        elif typ == 'connecting':
             self.status_text.configure(text=f"Conectando... {ip}:{port}")
-        elif typ in ("disconnect", "error"):
+
+        elif typ == "disconnect":
             # mantém info do último remoto, útil para o usuário
             suffix = f" {ip}:{port}" if ip else ""
             self.status_text.configure(text=f"Desconectado")
+        elif typ == "error":
+            self.status_text.configure(text=f"Erro: {ev.get("text")}")
+        else:
+            print(f"[HEADER] Connect event desconhecido => {typ}")
 
     def destroy(self):
         try:

@@ -6,7 +6,7 @@ from iluflex_tools.widgets.status_led import StatusLed
 from iluflex_tools.widgets.page_title import PageTitle
 from iluflex_tools.core.validators import get_safe_int
 
-DEBUG = False
+DEBUG = True
 
 TABLE_FONT_SIZE = 12
 
@@ -113,6 +113,19 @@ class ConexaoPage(ctk.CTkFrame):
             self._connect()
 
     def _connect(self):
+        # Verifica se tem alguma linha selecionada.
+        row = self._get_selected_row()
+        if row:
+            ip = (row.get("IP") or "").strip()
+            port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
+
+            if ip:
+                self.ip_entry.delete(0, "end")
+                self.ip_entry.insert(0, ip)
+                # valida porta também.
+                self.port_entry.delete(0, "end")
+                self.port_entry.insert(0, str(port))
+
         ip = self.ip_entry.get().strip()
         port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
         desired_auto = bool(self.auto_reconnect.get())
@@ -127,6 +140,13 @@ class ConexaoPage(ctk.CTkFrame):
                 self._conn.stop_auto_reconnect()
         except Exception:
             pass
+
+        if self._conn.get_is_connected and False:
+            # se já está conectado em outro host, não reconecta.
+            print(f"[CONNECT] no _connect detectou conexão anterior")
+            # precisa desconectar, esperar um pouco, e reconectar.
+
+
         ok = bool(self._conn.connect(ip, port))
         if DEBUG: print(f"[ConexaoPage] connect({ip}:{port}) -> ok={ok}")
         # aplica estado desejado do switch após conectar (ou manter tentando, se falhou)

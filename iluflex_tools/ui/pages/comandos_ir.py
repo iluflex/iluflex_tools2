@@ -6,6 +6,7 @@ from iluflex_tools.widgets.cards import DropDownCard as dpc
 from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.widgets.buttontags import ButtonTagsWidget
 from iluflex_tools.widgets.page_title import PageTitle
+from iluflex_tools.core.validators import get_safe_int
 
 DEBUG = False
 
@@ -399,10 +400,11 @@ class ComandosIRPage(ctk.CTkFrame):
             self.ir_received_cmd_raw = ""
             return
         try:
-            pause_threshold_ms = int(self.pause_treshold_entry.get().strip())
-            if 1 <= pause_threshold_ms < 80:
-                pause_threshold = int(pause_threshold_ms) * 1000 # converte para µs
-            else: pause_threshold = 40000
+            pause = self.pause_treshold_entry.get()
+            pause_threshold_ms = get_safe_int(pause,1,80,40)
+            if int(pause) != pause_threshold_ms:
+                self.pause_treshold_entry.set(0, str(pause_threshold_ms))
+            pause_threshold = pause_threshold_ms  * 1000 # converte para µs
             max_frames = int(self.max_frames_cbox.get()) if self.max_frames_cbox else 3
             normalize = bool(self.normalize_switch.get()) if self.normalize_switch else True
 
@@ -514,7 +516,7 @@ class ComandosIRPage(ctk.CTkFrame):
         # reposiciona o pan na mesma fração após mudar o zoom
         self.wave.xview_moveto(first)
 
-        #--------------- Actions ----------------------
+    #--------------- Actions ----------------------
 
 
     def _copiar_para_entrada(self):

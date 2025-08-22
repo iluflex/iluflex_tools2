@@ -141,20 +141,23 @@ class ConexaoPage(ctk.CTkFrame):
         except Exception:
             pass
 
-        if self._conn.get_is_connected and False:
+        if self._conn.get_is_connected:
             # se já está conectado em outro host, não reconecta.
-            print(f"[CONNECT] no _connect detectou conexão anterior")
+            if DEBUG: print(f"[ConexaoPage] no _connect detectou conexão anterior")
             # precisa desconectar, esperar um pouco, e reconectar.
 
+        def worker():
+            if DEBUG: print("[ConexaoPage worker] start worker")
+            ok = self._conn.connect(ip, port)
+            # se precisar atualizar a UI após terminar:
+            self.after(0, lambda: print(f"[ConexaoPage worker] end: ({ip}:{port}) -> ok: {ok}"))
 
-        ok = bool(self._conn.connect(ip, port))
-        if DEBUG: print(f"[ConexaoPage] connect({ip}:{port}) -> ok={ok}")
+        threading.Thread(target=worker, daemon=True).start()
+
         # aplica estado desejado do switch após conectar (ou manter tentando, se falhou)
         try:
-            if hasattr(self._conn, "enable_auto_reconnect"):
-                self._conn.enable_auto_reconnect(desired_auto)
-            else:
-                (self._conn.auto_reconnect() if desired_auto else self._conn.stop_auto_reconnect())
+            self._conn.enable_auto_reconnect(desired_auto)
+            if DEBUG: print(f"[ConexaoPage worker] desired auto reconnect: ({desired_auto})")
         except Exception as e:
             if DEBUG: print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
 

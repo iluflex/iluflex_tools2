@@ -7,7 +7,7 @@ from iluflex_tools.core.ircode import IrCodeLib
 from iluflex_tools.widgets.buttontags import ButtonTagsWidget
 from iluflex_tools.widgets.page_title import PageTitle
 
-DEBUG = True
+DEBUG = False
 
 class ComandosIRPage(ctk.CTkFrame):
     """

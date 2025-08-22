@@ -5,7 +5,7 @@ from typing import List
 # Configuracao
 PAUSE_THRESHOLD_US = 15000
 TOLERANCE = 0.2
-DEBUG = True
+DEBUG = False
 max_pause_before_cut = 0  # variável global
 
 class CompressError(Exception):
@@ -461,31 +461,34 @@ def conversion(buffer: str) -> list[int]:
     if (DEBUG): print("[Debug] Estado final não chegou a 30")
     return []
 
+def iluflex_to_compatibility(pulso: List[int]) -> List[int]:
+    """Converte vetor sir,2 (pulsos em ticks 1,6 µs) para vetor "compatível"
+    usado na compactação (tempos em N ciclos, como sir,3/sir,4).
 
-def iluflex_to_compatibility(pulso: list[int]) -> list[int]:
-    buffer_out = [0] * 1000
-    if pulso[3] == 0:
-        if (DEBUG): print("[Debug] pulso[3] (período) é zero, não pode dividir")
+    - Campo 3 do header é convertido de Per (0,1 µs) para freq (Hz) com
+      divisão inteira, espelhando o C (1e7 // Per).
+    - Cada tempo t2 (>= índice 6) vira N = round_half_up(16*t2/Per).
+    """
+    if len(pulso) < 7:
         return []
-    
+    if pulso[3] == 0:
+        return []
+
+    buffer_out = [0] * max(len(pulso), pulso[0] + 6)
+
+    # Copia campos de header 0..5
     for i in range(0, 6):
         buffer_out[i] = pulso[i]
 
-    periodo = pulso[3]
-    buffer_out[3] = round(10000000 / periodo)
+    periodo = pulso[3]  # Per em 0,1 µs
+    # ESP usa divisão inteira aqui (no C: 10000000 / Per)
+    buffer_out[3] = 10_000_000 // periodo
 
-    if (DEBUG): print(f"[Debug] Período de portadora: {periodo} e freq: {buffer_out[3]}")
-    # para 262 temos 38167
-
-    i = 6
+    # Converte todos os tempos após o header para N (ciclos)
     plen = pulso[0] + 6
-    while i < plen:
-        if pulso[i] > 0 and i <= len(pulso):
-            buffer_out[i] = round((256 * pulso[i]) / (10 * periodo)) # int(16 * pulso[i] / periodo)
-            # Isso implementa: N = round((256 * t2) / (10 * Per)), que é a forma inteira da relação canônica
-        else:
-            buffer_out[i] = 0
-        i += 1
+    for i in range(6, plen):
+        ti = pulso[i]
+        buffer_out[i] = sir2_to_sir34_per(ti, periodo) if ti > 0 else 0
 
     return buffer_out
 
@@ -1028,7 +1031,7 @@ def sir34tosir2(sirin):
     # converte tempos da unidade do sir,2 (1.6 x µs) para pulsos do sir,3 ou sir,4 ou GC
     def timePulseConversion(strnum) -> int:
         # return round(((625000 * int(strnum)) - 312500) / freq) usa half round up com inteiros  
-        return round((390625 * int(strnum)) / freq)
+        return round((625000 * int(strnum)) / freq)
 
 
     if splited[1] == '4':  # conversão de sir,4 para sir,2
@@ -1152,64 +1155,69 @@ def sir34tosir2(sirin):
                         
     return resultsir2
 
-# ========================= NOVA funções para conversões ==============================
-"""
- * Analisando códigos de com chatGPT chegamos às seguintes conclusões:
- * sir,2 usa tempos represtando em ticks de 1,6 us microsegundos. Não pedende da freq da portadora.
- * sir,3 e 4 usam tempos equivalentes ao número de pulsos da portadora, portanto a duração depende da frquencia.
- * freq = frequência (Hz) vinda do header de sir,3/sir,4
- * N = duração codificada em sir,3/sir,4 (unidade compatível)
- * t2 = duração em ticks de 1,6 µs (formato sir,2)
- * us = duração em microssegundos (opcional, como intermediário)
- * per = período da portadora em unidades de 0,1 µs (100 ns). Valor histórico herdado do PIC (ciclo de instrução de 100 ns).
- * Constante: BASE = 390625 = 625000 * 10 / 16.
- * Conversor usa a constante 625000 (que é 1 / 1,6 µs)
- *
-"""
+
+# ----------------------------------------------------------------------------
+#  Conversões CANÔNICAS entre unidades usadas pelo firmware
+#  - t2 (sir,2): ticks de 1,6 µs (us/1.6)
+#  - N  (sir,3/4): número de ciclos da portadora
+#  - us: microssegundos
+#  - Per (0,1 µs): período da portadora em décimos de µs (campo 5 do sir,2)
+#  Observação:
+#  A reprodução do ESP converte N → µs com multiplicador = 1e6/freq e depois
+#  µs → RMT ticks (10 µs). Portanto, a relação correta é:
+#      N  = round_half_up(t2 * freq / 625000)
+#      t2 = round_half_up(N  * 625000 / freq)
+#  e, usando Per diretamente (freq = 10_000_000 / Per):
+#      N  = round_half_up(16 * t2 / Per)
+#      t2 = round_half_up(N  * Per / 16)
+# ----------------------------------------------------------------------------
 
 def sir34_to_sir2(N: int, freq: int) -> int:
-    return round((390625 * N) / freq)
+    """Converte ciclos (sir,3/4) para ticks 1,6 µs (sir,2).
+    t2 = round_half_up(N * 625000 / freq)
+    """
+    return _div_round_half_up(N * 625000, freq)
+
 
 def sir2_to_sir34(t2: int, freq: int) -> int:
-    return round((t2 * freq) / 390625)
+    """Converte ticks 1,6 µs (sir,2) para ciclos (sir,3/4).
+    N = round_half_up(t2 * freq / 625000)
+    """
+    return _div_round_half_up(t2 * freq, 625000)
+
 
 def sir34_to_us(N: int, freq: int) -> int:
-    return round((625000 * N) / freq)
+    """Converte ciclos (sir,3/4) diretamente para microssegundos.
+    us = round_half_up(N * 1_000_000 / freq)
+    """
+    return _div_round_half_up(N * 1_000_000, freq)
+
 
 def us_to_sir2(us: int) -> int:
-    return round(us * 10 / 16)
+    """Converte microssegundos para ticks 1,6 µs (sir,2): round_half_up(us/1.6)."""
+    return _div_round_half_up(us * 10, 16)
+
 
 def sir2_to_us(t2: int) -> int:
-    return round(t2 * 16 / 10)
+    """Converte ticks 1,6 µs (sir,2) para microssegundos: round_half_up(t2*1.6)."""
+    return _div_round_half_up(t2 * 16, 10)
 
-# === Versões usando Per (0,1 µs) ===
-
-def sir34_to_sir2_per(N: int, Per: int) -> int:
-    # t2 = round( (10 * N * Per) / 256 )
-    return round((10 * N * Per) / 256)
+# --- Versões usando período Per em décimos de µs (0,1 µs) -------------------
 
 def sir2_to_sir34_per(t2: int, Per: int) -> int:
-    # N = round( (256 * t2) / (10 * Per) )
-    return round((256 * t2) / (10 * Per))
+    """N = round_half_up(16 * t2 / Per)."""
+    return _div_round_half_up(16 * t2, Per)
+
+
+def sir34_to_sir2_per(N: int, Per: int) -> int:
+    """t2 = round_half_up(N * Per / 16)."""
+    return _div_round_half_up(N * Per, 16)
+
 
 def sir34_to_us_per(N: int, Per: int) -> int:
-    # us = round( (N * Per) / 16 )
-    return round((N * Per) / 16)
+    """us = round_half_up(N * (Per/10))."""
+    return _div_round_half_up(N * Per, 10)
 
-def sir34_to_sir2(N: int, freq: int) -> int:
-    return round((390625 * N) / freq)
-
-def sir2_to_sir34(t2: int, freq: int) -> int:
-    return round((t2 * freq) / 390625)
-
-def sir34_to_us(N: int, freq: int) -> int:
-    return round((625000 * N) / freq)
-
-def us_to_sir2(us: int) -> int:
-    return round(us * 10 / 16)
-
-def sir2_to_us(t2: int) -> int:
-    return round(t2 * 16 / 10)
 
 # ------------------------- EDITOR/CONVERSOR ---------------------------------
 def update_rep_channel_fields(cmd: str, rep: int, channel: int) -> str:
@@ -1245,3 +1253,14 @@ def repeat_pulses(pulses: list[int], rep: int) -> list[int]:
     if rep <= 1 or not pulses:
         return pulses
     return pulses * rep  
+
+
+# ----------------------------------------------------------------------------
+#  Arredondamento idêntico ao usado no C (half-up): (num + den/2) / den
+# ----------------------------------------------------------------------------
+
+def _div_round_half_up(num: int, den: int) -> int:
+    if den == 0:
+        raise ZeroDivisionError("Denominador zero em divisão com arredondamento")
+    return (num + den // 2) // den
+

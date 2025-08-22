@@ -15,6 +15,7 @@ C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe -m pip insta
 C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe main.py
 ```
 ## Comandos para gerar executável com Installer
+pyinstaller --onefile --noconsole --icon=iluflex-Learner-icon.ico --add-data "iluflex-Learner-icon.ico;." iluflex_learner.py
 
 ## Status LED
 

@@ -17,7 +17,17 @@ from iluflex_tools.ui.pages.configurar_master import ConfigurarMasterPage
 from iluflex_tools.ui.pages.configuracoes import PreferenciasPage
 from iluflex_tools.ui.pages.ajuda import AjudaPage
 
-
+MENU_ITEMS = [
+    ("INICIO", "dashboard", "🏠"),
+    ("CONEXÃO", "conexao", "🔌"),
+    ("GESTÃO DE DISPOSITIVOS", "gestao_dispositivos", "🗂"),
+#    ("ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade", "⬆"),
+    ("COMANDOS IR", "comandos_ir", "📡"),
+#    ("INTERFACE DE PROGRAMAÇÃO", "interface_programacao", "🛠"),
+#    ("CONFIGURAR MASTER", "configurar_master", "⚙"),
+    ("PREFERÊNCIAS", "preferencias", "⚙️"),
+    ("AJUDA", "ajuda", "❓"),
+]
 
 class MainApp(ctk.CTk):
     def __init__(self):
@@ -49,7 +59,7 @@ class MainApp(ctk.CTk):
         self.header = Header(self, conn=self.conn, on_toggle_collapse=self._toggle_sidebar_collapse)
         self.header.grid(row=0, column=0, columnspan=2, sticky="ew")
 
-        self.sidebar = Sidebar(self, on_nav=self.navigate, collapsed=True)
+        self.sidebar = Sidebar(self, on_nav=self.navigate, collapsed=True, menu_items=MENU_ITEMS)
         self.sidebar.grid(row=1, column=0, sticky="nsw")
 
         self.content = ctk.CTkFrame(self, corner_radius=0)
@@ -70,7 +80,7 @@ class MainApp(ctk.CTk):
             pass
 
     def _mount_pages(self):
-        self.pages["dashboard"] = DashboardPage(self.content, on_quick_nav=self.navigate)
+        self.pages["dashboard"] = DashboardPage(self.content, on_quick_nav=self.navigate,menu_items=MENU_ITEMS)
         self.pages["conexao"] = ConexaoPage(
             self.content,
             get_state=lambda: self.app_state,

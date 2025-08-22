@@ -11,11 +11,12 @@ class DashboardPage(ctk.CTkFrame):
       - atalhos em grade responsiva (1/2/3 colunas)
       - ícone antes do nome
     """
-    def __init__(self, master, on_quick_nav):
+    def __init__(self, master, on_quick_nav, menu_items):
         super().__init__(master, fg_color="#F5F6F8")
         self.on_quick_nav = on_quick_nav
         self._logo_img = None
         self._logo_ctk = None
+        self.menu_items=menu_items
         self._built_cols = None  # p/ evitar realocar sem necessidade
         self._build()
 
@@ -41,21 +42,11 @@ class DashboardPage(ctk.CTkFrame):
         self.grid_wrap = ctk.CTkFrame(self, fg_color="#F5F6F8")
         self.grid_wrap.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 10))
 
-        # dados dos atalhos (ícone + rótulo + rota)
-        self.shortcuts_data = [
-            ("🔌  CONEXÃO", "conexao"),
-            ("🗂  GESTÃO DE DISPOSITIVOS", "gestao_dispositivos"),
-            ("⬆  ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade"),
-            ("📡  COMANDOS IR", "comandos_ir"),
-            ("🛠  INTERFACE DE PROGRAMAÇÃO", "interface_programacao"),
-            ("⚙  CONFIGURAR MASTER", "configurar_master"),
-            ("⚙️  PREFERÊNCIAS", "preferencias"),
-            ("❓  AJUDA", "ajuda"),
-        ]
-
         # cria os botões uma única vez (regridamos depois conforme nº de colunas)
+        # obtem dados de MENU_ITEMS definido no main_app.py
         self.shortcut_buttons = []
-        for text, route in self.shortcuts_data:
+        for idx, (label, route, icon) in enumerate(self.menu_items):
+            text = f"{icon}  {label}"
             b = ctk.CTkButton(
                 self.grid_wrap,
                 text=text,

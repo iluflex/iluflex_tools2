@@ -1,17 +1,5 @@
 import customtkinter as ctk
 
-MENU_ITEMS = [
-    ("INICIO", "dashboard", "🏠"),
-    ("CONEXÃO", "conexao", "🔌"),
-    ("GESTÃO DE DISPOSITIVOS", "gestao_dispositivos", "🗂"),
-    ("ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade", "⬆"),
-    ("COMANDOS IR", "comandos_ir", "📡"),
-    ("INTERFACE DE PROGRAMAÇÃO", "interface_programacao", "🛠"),
-    ("CONFIGURAR MASTER", "configurar_master", "⚙"),
-    ("PREFERÊNCIAS", "preferencias", "⚙️"),
-    ("AJUDA", "ajuda", "❓"),
-]
-
 FG_BASE      = ("#E5E7EB", "#1F2937")
 FG_ACTIVE    = ("#CBD5E1", "#334155")
 FG_HOVER     = ("#94A3B8", "#475569")
@@ -22,10 +10,11 @@ class Sidebar(ctk.CTkFrame):
     WIDTH_COLLAPSED = 56
     WIDTH_EXPANDED  = 240
 
-    def __init__(self, master, on_nav=None, collapsed=False):
+    def __init__(self, master, on_nav=None, collapsed=False, menu_items = []):
         super().__init__(master, corner_radius=0, fg_color=FRAME_COLOR)
         self.on_nav = on_nav
         self.collapsed = collapsed
+        self.menu_items = menu_items
         self._buttons = {}
         # impede o conteúdo de forçar o frame a alargar
         self.grid_propagate(False)
@@ -33,7 +22,7 @@ class Sidebar(ctk.CTkFrame):
         self._apply_width()
 
     def _build(self):
-        for idx, (label, key, icon) in enumerate(MENU_ITEMS):
+        for idx, (label, key, icon) in enumerate(self.menu_items):
             txt = icon if self.collapsed else f"{icon}  {label}"
             anchor = "center" if self.collapsed else "w"
             btn = ctk.CTkButton(

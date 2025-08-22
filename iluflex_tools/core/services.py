@@ -32,6 +32,9 @@ class ConnectionService:
         self._auto_reconnect_enabled = False  # quando True, desconexões disparam auto‑reconnect
         self._rx_buffer = bytearray()
 
+    def get_is_connected(self):
+        return self.connected
+
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
         with self._listener_lock:

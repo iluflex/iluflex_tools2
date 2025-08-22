@@ -103,6 +103,8 @@ class ConexaoPage(ctk.CTkFrame):
         if not row:
             return
         ip = (row.get("IP") or "").strip()
+        port = int(self.port_entry.get().strip() or 4999)
+
         if ip:
             self.ip_entry.delete(0, "end")
             self.ip_entry.insert(0, ip)
@@ -110,23 +112,7 @@ class ConexaoPage(ctk.CTkFrame):
 
     def _connect(self):
         ip = self.ip_entry.get().strip()
-        port = int(self.port_entry.get().strip() or 0)
-        ok = bool(self._conn.connect(ip, port)) if self._conn is not None else False
-        if DEBUG: print(f"Tentou conectar ok = {ok}")
-        try:
-            if self.auto_reconnect.get():
-                self._conn.auto_reconnect()
-            else:
-                self._conn.stop_auto_reconnect()
-        except Exception as e:
-            if DEBUG: print("Erro ao tentar reconectar:", e)
-            pass
-        self.status.configure(text=f"Conectado a {ip}:{port}" if ok else "Falha na conexão")
-
-
-    def _connect(self):
-        ip = self.ip_entry.get().strip()
-        port = int(self.port_entry.get().strip() or 0)
+        port = int(self.port_entry.get().strip() or 4999)
         desired_auto = bool(self.auto_reconnect.get())
         if self._conn is None:
             if DEBUG: print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")

@@ -40,7 +40,7 @@ client_socket = None
 listener_thread = None
 connected = False
 learner_on = False
-DEBUG = True
+DEBUG = False
 
 # buffers/dados
 raw_sir2_data: str = ""  # último sir,2 recebido cru do learner (ou copiado via botão)

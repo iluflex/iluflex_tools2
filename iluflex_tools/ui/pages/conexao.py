@@ -1,10 +1,10 @@
 import threading
 import customtkinter as ctk
 from iluflex_tools.widgets.table_tree import ColumnToggleTree
-from iluflex_tools.core.services import ConnectionService
-from iluflex_tools.widgets.status_led import StatusLed
+from iluflex_tools.core.services import ConnectionService, NetworkService
 from iluflex_tools.widgets.page_title import PageTitle
 from iluflex_tools.core.validators import get_safe_int
+from iluflex_tools.core.app_state import STATE
 
 DEBUG = True
 
@@ -14,14 +14,15 @@ class ConexaoPage(ctk.CTkFrame):
     def __init__(
         self,
         master,
-        get_state,
         conn: ConnectionService | None = None,
     ):
         super().__init__(master)
-        self.get_state = get_state
         self._scan_thread = None
         self._conn = conn
-        self._listener_attached = False
+        self.ip_entry_var = ctk.StringVar(value=STATE.data.ip) # guarde como atributo!
+        self.port_entry_var = ctk.StringVar(value=str(STATE.data.port)) # Entry trabalha com texto
+        self.auto_recconect_switch_var = ctk.BooleanVar(value=STATE.data.auto_reconnect)
+        self.net = NetworkService()
 
         self._build()
 
@@ -40,13 +41,11 @@ class ConexaoPage(ctk.CTkFrame):
         conn_frame.grid_columnconfigure(5, weight=1)   # spacer que empurra o botão
   
         ctk.CTkLabel(conn_frame, text="IP Master:").grid(row=0, column=0, sticky="w", padx=6, pady=6)
-        self.ip_entry = ctk.CTkEntry(conn_frame)
-        self.ip_entry.insert(0, self.get_state().ip)
+        self.ip_entry = ctk.CTkEntry(conn_frame, textvariable=self.ip_entry_var)
         self.ip_entry.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
 
         ctk.CTkLabel(conn_frame, text="Porta:").grid(row=0, column=3, sticky="e", padx=6, pady=6)
-        self.port_entry = ctk.CTkEntry(conn_frame)
-        self.port_entry.insert(0, str(self.get_state().port))
+        self.port_entry = ctk.CTkEntry(conn_frame, textvariable=self.port_entry_var)
         self.port_entry.grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
         self.btn_buscar = ctk.CTkButton(conn_frame, text="Buscar master na rede", command=self._buscar)
@@ -76,8 +75,8 @@ class ConexaoPage(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(self)
         btns.grid(row=4, column=0, columnspan=3, pady=8)
-        self.auto_reconnect = ctk.CTkSwitch(btns, text="Auto reconectar", command=self._on_toggle_auto)
-        self.auto_reconnect.pack(side="left", padx=6)
+        self.auto_reconnect_switch = ctk.CTkSwitch(btns, text="Auto reconectar", command=self._on_toggle_auto)
+        self.auto_reconnect_switch.pack(side="left", padx=6)
         
         ctk.CTkButton(btns, text="Conectar", command=self._connect).pack(side="left", padx=6)
         ctk.CTkButton(btns, text="Desconectar", command=self._disconnect).pack(side="left", padx=6)
@@ -90,11 +89,11 @@ class ConexaoPage(ctk.CTkFrame):
         # refletir estado real do serviço
         try:
             if self._conn is not None and self._conn.get_auto_reconnect_enabled():
-                self.auto_reconnect.select()
+                self.auto_reconnect_switch.select()
             else:
-                self.auto_reconnect.deselect()
+                self.auto_reconnect_switch.deselect()
         except Exception:
-            self.auto_reconnect.deselect()
+            self.auto_reconnect_switch.deselect()
 
     # ---- Ações ----
             
@@ -106,11 +105,8 @@ class ConexaoPage(ctk.CTkFrame):
         port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
 
         if ip:
-            self.ip_entry.delete(0, "end")
-            self.ip_entry.insert(0, ip)
-            # valida porta também.
-            self.port_entry.delete(0, "end")
-            self.port_entry.insert(0, str(port))
+            self.ip_entry_var.set(ip)
+            self.port_entry_var.set(str(port))
 
 
     def _on_row_double_click(self, _event=None):
@@ -121,11 +117,8 @@ class ConexaoPage(ctk.CTkFrame):
         port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
 
         if ip:
-            self.ip_entry.delete(0, "end")
-            self.ip_entry.insert(0, ip)
-            # valida porta também.
-            self.port_entry.delete(0, "end")
-            self.port_entry.insert(0, str(port))
+            self.ip_entry_var.set(ip)
+            self.port_entry_var.set(str(port))
             self._connect()
 
     def _connect(self):
@@ -133,7 +126,10 @@ class ConexaoPage(ctk.CTkFrame):
 
         ip = self.ip_entry.get().strip()
         port = get_safe_int(self.port_entry.get(), 1, 65000, 4999)
-        desired_auto = bool(self.auto_reconnect.get())
+        desired_auto = bool(self.auto_reconnect_switch.get())
+        # Precisa atualizar o STATE
+        STATE.set_ip_port(ip, port)
+        STATE.set("auto_reconnect", desired_auto)
         if self._conn is None:
             if DEBUG: print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")
             return
@@ -172,14 +168,14 @@ class ConexaoPage(ctk.CTkFrame):
         except Exception:
             pass
         finally:
-            self.auto_reconnect.deselect()
+            self.auto_reconnect_switch.deselect()
 
 
     def _on_toggle_auto(self):
         if self._conn is None:
             if DEBUG: print("[ConexaoPage] _on_toggle_auto: self._conn é None")
             return
-        enabled = bool(self.auto_reconnect.get())
+        enabled = bool(self.auto_reconnect_switch.get())
         # print(f"[ConexaoPage] toggle auto -> {enabled}")
         try:
             self._conn.enable_auto_reconnect(enabled)
@@ -191,14 +187,14 @@ class ConexaoPage(ctk.CTkFrame):
     def _buscar(self):
         if self._scan_thread and self._scan_thread.is_alive():
             return
-        timeout = int(self.get_discovery_timeout())
+        timeout = int(STATE.data.discovery_timeout_ms)
         self.table.set_rows([])
         self.table.set_font_size(TABLE_FONT_SIZE)
         self.btn_buscar.configure(state="disabled", text="Aguarde…")
         self.status.configure(text=f"Procurando (timeout={timeout}ms)…")
 
         def worker():
-            items = self.scan_func(
+            items = self.net.scan_masters(
                 timeout_ms=timeout,
                 on_found=lambda d: self.after(0, self._append_row, d)
             )
@@ -235,11 +231,11 @@ class ConexaoPage(ctk.CTkFrame):
 
 
     def _do_scan(self):
-        timeout = int(self.get_discovery_timeout())
+        timeout = int(STATE.data.discovery_timeout_ms)
         self.table.set_rows([])
         def on_found(item: dict):
             self.after(0, self._append_row, item)
-        items = self.scan_func(timeout_ms=timeout, on_found=on_found)
+        items = self.net.scan_masters(timeout_ms=timeout, on_found=on_found)
         self.after(0, lambda: self.status.configure(text=f"{len(items)} dispositivo(s) encontrados (timeout={timeout}ms)"))
 
 
@@ -268,7 +264,13 @@ class ConexaoPage(ctk.CTkFrame):
 
     # called by main_app.navigate when the page becomes visible
     def on_page_activated(self):
-        print("falta obter ip do appstate")
+        print(f"[PAGINA CONEXAO] on page activated: STATE ip:{STATE.data.ip} port:{STATE.data.port}")
+        self.ip_entry_var.set(STATE.data.ip)
+        self.port_entry_var.set(str(STATE.data.port))
+        if STATE.data.auto_reconnect:
+            self.auto_reconnect_switch.select()
+        else:
+            self.auto_reconnect_switch.deselect()
 
     # called by main_app.navigate when the page is hidden
     #def on_page_deactivated(self):

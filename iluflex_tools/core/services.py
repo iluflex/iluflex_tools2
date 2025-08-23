@@ -155,6 +155,7 @@ class ConnectionService:
     def _recv_loop(self):
         assert self._sock is not None
         while not self._stop.is_set():
+            last_rx_time = 0
             try:
                 data = self._sock.recv(4096)
                 last_rx_time = time.monotonic()
@@ -237,6 +238,9 @@ class ConnectionService:
     # ---- util ----
     def get_remote(self) -> tuple[str, int]:
         return self._remote
+    
+    def set_remote(self, ip: str, port: int) -> None:
+        self._remote = (ip, port)
 
 # --------- OTA Services ---------
 class OtaService:

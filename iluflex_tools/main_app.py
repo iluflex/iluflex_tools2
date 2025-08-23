@@ -2,7 +2,6 @@ import customtkinter as ctk
 from tkinter import ttk
 
 from iluflex_tools.theming.theme import apply_theme
-from iluflex_tools.core.protocols.types import AppState
 from iluflex_tools.core.services import ConnectionService, OtaService, NetworkService
 from iluflex_tools.core.settings import load_settings, save_settings
 from iluflex_tools.ui.header import Header
@@ -16,6 +15,7 @@ from iluflex_tools.ui.pages.interface_programacao import InterfaceProgramacaoPag
 from iluflex_tools.ui.pages.configurar_master import ConfigurarMasterPage
 from iluflex_tools.ui.pages.configuracoes import PreferenciasPage
 from iluflex_tools.ui.pages.ajuda import AjudaPage
+from iluflex_tools.core.app_state import STATE
 
 MENU_ITEMS = [
     ("INICIO", "dashboard", "🏠"),
@@ -32,6 +32,8 @@ MENU_ITEMS = [
 class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        # ... load_settings/theme ...
+        STATE.sync_from_settings() # inicializa a partir de settings
         apply_theme() # fallback inicial (mantém comportamento atual)
         self.title("iLuFlex Tools")
         self.geometry("900x720")
@@ -45,10 +47,6 @@ class MainApp(ctk.CTk):
         except Exception:
             pass
 
-        self.app_state = AppState(
-            ip=self.settings.last_ip,
-            port=self.settings.last_port
-        )
         self.conn = ConnectionService()
         self.ota = OtaService()
         self.net = NetworkService()
@@ -73,17 +71,11 @@ class MainApp(ctk.CTk):
         # self._apply_global_table_font(nsize=10)  # Aplica fonte global para todas as tabelas não funciona
         self.navigate("dashboard")
 
-        # habilita auto‑reconnect (sem o main ouvir eventos)
-        try:
-            self.conn.enable_auto_reconnect(True, interval=5.0)
-        except Exception:
-            pass
 
     def _mount_pages(self):
         self.pages["dashboard"] = DashboardPage(self.content, on_quick_nav=self.navigate,menu_items=MENU_ITEMS)
         self.pages["conexao"] = ConexaoPage(
             self.content,
-            get_state=lambda: self.app_state,
             conn=self.conn,
         )
         # >>> alteração: passa conn também, para a página ouvir RX de RRF,10

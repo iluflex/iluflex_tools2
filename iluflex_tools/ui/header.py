@@ -1,6 +1,8 @@
 import customtkinter as ctk
 from iluflex_tools.widgets.status_led import StatusLed
 
+DEBUG = False
+
 class Header(ctk.CTkFrame):
     def __init__(self, master, conn, on_toggle_collapse=None):
         super().__init__(master, corner_radius=0, fg_color=("gray85","gray14"))
@@ -13,7 +15,7 @@ class Header(ctk.CTkFrame):
         try:
             self.conn.add_listener(self._listener)
         except Exception as e:
-            print("Header Error", e )
+            if DEBUG: print("Header Error", e )
             pass
 
 
@@ -37,7 +39,7 @@ class Header(ctk.CTkFrame):
 
     # ---- eventos da conexão ----
     def _on_conn_event(self, ev: dict):
-        print(f"[HEADER] Connect event => {ev}")
+        if DEBUG: print(f"[HEADER] Connect event => {ev}")
         typ = ev.get("type")
         ip, port = ev.get("remote", ("", 0))
         if typ == "connect":
@@ -56,7 +58,7 @@ class Header(ctk.CTkFrame):
         elif typ == "error":
             self.status_text.configure(text=f"Erro: {ev.get("text")}")
         else:
-            print(f"[HEADER] Connect event desconhecido => {typ}")
+            if DEBUG: print(f"[HEADER] Connect event desconhecido => {typ}")
 
     def destroy(self):
         try:

@@ -35,6 +35,9 @@ class ConnectionService:
 
     def get_is_connected(self):
         return self.connected
+    
+    def get_auto_reconnect_enabled(self):
+        return self._auto_reconnect_enabled
 
     # ---- listeners ----
     def add_listener(self, cb: Callable[[Dict[str, Any]], None]):

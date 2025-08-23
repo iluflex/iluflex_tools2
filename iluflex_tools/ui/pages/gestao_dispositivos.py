@@ -66,7 +66,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self._maybe_autorefresh()        
         # refletir estado real do serviço de reconecção
         try:
-            if self.conn is not None and hasattr(self.conn, "is_auto_reconnect_enabled") and self.conn.is_auto_reconnect_enabled():
+            if self.conn is not None and self.conn.get_auto_reconnect_enabled():
                 self.auto_reconnect.select()
             else:
                 self.auto_reconnect.deselect()
@@ -97,7 +97,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         #self.auto_reconnect.pack(side="right", padx=6)
         # refletir estado real do serviço
         try:
-            if self.conn is not None and hasattr(self.conn, "is_auto_reconnect_enabled") and self.conn.is_auto_reconnect_enabled():
+            if self.conn is not None and self.conn.get_auto_reconnect_enabled():
                 self.auto_reconnect.select()
             else:
                 self.auto_reconnect.deselect()
@@ -372,15 +372,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             if DEBUG: print("[GestaoDispositivosPage] _on_toggle_auto_reconnect: self.conn é None")
             return
         enabled = bool(self.auto_reconnect.get())
-        # if DEBUG: print(f"[ConexaoPage] toggle auto -> {enabled}")
-        try:
-            if hasattr(self.conn, "enable_auto_reconnect"):
-                self.conn.enable_auto_reconnect(enabled)
-            else:
-                (self.conn.auto_reconnect() if enabled else self.conn.stop_auto_reconnect())
-        except Exception as e:
-            if DEBUG: print("[GestaoDispositivosPage] Erro ao alternar auto-reconnect:", e)
-
+        self.conn.enable_auto_reconnect(enabled)
 
 
     def _on_click_atualizar(self):
@@ -475,16 +467,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 pass
             if callable(self._send):
                 self._send("SRF,15,9\r")
-        except Exception:
-            pass
-
-    def _on_toggle_auto(self) -> None:
-        enabled = bool(self.auto_reconnect.get())
-        try:
-            if enabled:
-                self.conn.auto_reconnect()
-            else:
-                self.conn.stop_auto_reconnect()
         except Exception:
             pass
 

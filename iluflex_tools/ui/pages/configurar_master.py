@@ -4,6 +4,7 @@ from iluflex_tools.widgets.page_title import PageTitle
 from iluflex_tools.core.validators import get_safe_int
 from iluflex_tools.core.protocols import IPv4Config, IPv4ConfigValidator, build_srf16_sequence
 from iluflex_tools.core.protocols.rrf16 import RRF16_6Parser, RRF16_9Parser
+from iluflex_tools.core.settings import save_settings
 
 DEBUG = True
 
@@ -352,6 +353,10 @@ class ConfigurarMasterPage(ctk.CTkFrame):
                     summary = self._pending_summary or "configurações"
                     self.status.configure(text=f"Configurações salvas: {summary}. Reiniciando a master…")
                     self.conn.send("SRF,16,8\r")
+                    # a master vai reiniciar em breve.
+                    self.conn.enable_auto_reconnect(True)
+
+
                 else:
                     self.status.configure(text="Aviso: 16,9 diferente do solicitado. Confira IP/DHCP/Host.", text_color="red")
             self._verify_target = None

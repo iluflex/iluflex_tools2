@@ -2,7 +2,7 @@ import customtkinter as ctk
 from tkinter import ttk
 
 from iluflex_tools.theming.theme import apply_theme
-from iluflex_tools.core.state import AppState
+from iluflex_tools.core.protocols.types import AppState
 from iluflex_tools.core.services import ConnectionService, OtaService, NetworkService
 from iluflex_tools.core.settings import load_settings, save_settings
 from iluflex_tools.ui.header import Header
@@ -84,8 +84,6 @@ class MainApp(ctk.CTk):
         self.pages["conexao"] = ConexaoPage(
             self.content,
             get_state=lambda: self.app_state,
-            scan_func=self.net.scan_masters,
-            get_discovery_timeout=lambda: self.settings.discovery_timeout_ms,
             conn=self.conn,
         )
         # >>> alteração: passa conn também, para a página ouvir RX de RRF,10

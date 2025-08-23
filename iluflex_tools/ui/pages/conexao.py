@@ -15,16 +15,14 @@ class ConexaoPage(ctk.CTkFrame):
         self,
         master,
         get_state,
-        scan_func=None,
-        get_discovery_timeout=None,
         conn: ConnectionService | None = None,
     ):
         super().__init__(master)
         self.get_state = get_state
-        self.scan_func = scan_func or (lambda timeout_ms: [])
-        self.get_discovery_timeout = get_discovery_timeout or (lambda: 2000)
         self._scan_thread = None
         self._conn = conn
+        self._listener_attached = False
+
         self._build()
 
     def _build(self):
@@ -91,7 +89,7 @@ class ConexaoPage(ctk.CTkFrame):
 
         # refletir estado real do serviço
         try:
-            if self._conn is not None and hasattr(self._conn, "is_auto_reconnect_enabled") and self._conn.is_auto_reconnect_enabled():
+            if self._conn is not None and self._conn.get_auto_reconnect_enabled():
                 self.auto_reconnect.select()
             else:
                 self.auto_reconnect.deselect()
@@ -140,13 +138,7 @@ class ConexaoPage(ctk.CTkFrame):
             if DEBUG: print("[ConexaoPage] _connect: self._conn é None — verifique a injeção em main_app.py")
             return
         # evitar corrida: desliga auto enquanto troca de conexão (inclui duplo clique já conectado)
-        try:
-            if hasattr(self._conn, "enable_auto_reconnect"):
-                self._conn.enable_auto_reconnect(False)
-            else:
-                self._conn.stop_auto_reconnect()
-        except Exception:
-            pass
+        self._conn.enable_auto_reconnect(False)
 
         if self._conn.get_is_connected:
             # se já está conectado em outro host, não reconecta.
@@ -169,22 +161,16 @@ class ConexaoPage(ctk.CTkFrame):
             if DEBUG: print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
 
 
-
-
     def _disconnect(self):
         if self._conn is None:
             if DEBUG: print("[ConexaoPage] _disconnect: self._conn é None")
             return
         # usuário pediu desconectar => NUNCA ficar tentando reconectar
         try:
-            if hasattr(self._conn, "enable_auto_reconnect"):
-                self._conn.enable_auto_reconnect(False)
-            else:
-                self._conn.stop_auto_reconnect()
+            self._conn.enable_auto_reconnect(False)
+            self._conn.disconnect()
         except Exception:
             pass
-        try:
-            self._conn.disconnect()
         finally:
             self.auto_reconnect.deselect()
 
@@ -196,10 +182,8 @@ class ConexaoPage(ctk.CTkFrame):
         enabled = bool(self.auto_reconnect.get())
         # print(f"[ConexaoPage] toggle auto -> {enabled}")
         try:
-            if hasattr(self._conn, "enable_auto_reconnect"):
-                self._conn.enable_auto_reconnect(enabled)
-            else:
-                (self._conn.auto_reconnect() if enabled else self._conn.stop_auto_reconnect())
+            self._conn.enable_auto_reconnect(enabled)
+
         except Exception as e:
             if DEBUG: print("[ConexaoPage] Erro ao alternar auto-reconnect:", e)
 
@@ -281,3 +265,11 @@ class ConexaoPage(ctk.CTkFrame):
 
     def destroy(self):
         return super().destroy()
+
+    # called by main_app.navigate when the page becomes visible
+    def on_page_activated(self):
+        print("falta obter ip do appstate")
+
+    # called by main_app.navigate when the page is hidden
+    #def on_page_deactivated(self):
+        # do something

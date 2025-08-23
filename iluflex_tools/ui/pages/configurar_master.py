@@ -1,6 +1,9 @@
 import customtkinter as ctk
+import threading
 from iluflex_tools.widgets.page_title import PageTitle
 from iluflex_tools.core.validators import get_safe_int
+from iluflex_tools.core.protocols import IPv4Config, IPv4ConfigValidator, build_srf16_sequence
+from iluflex_tools.core.protocols.rrf16 import RRF16_6Parser, RRF16_9Parser
 
 DEBUG = True
 
@@ -13,6 +16,16 @@ class ConfigurarMasterPage(ctk.CTkFrame):
         self._listener_attached = False
         self._mesh_ssid = None
         self._mesh_pass = None
+
+        # Estado do worker de envio/verificação
+        self._worker_running = False           # evita 2 workers em paralelo
+        self._ack_event = None                 # threading.Event criado por operação
+        self._verify_target = None             # dicionário do que vamos conferir no RRF,16,9
+        self._pending_summary = ""             # texto curto do que está sendo salvo
+
+        # parsers RRF,16
+        self._p16_6 = RRF16_6Parser()
+        self._p16_9 = RRF16_9Parser()
 
         PageTitle(self, "Configurar Master")
 
@@ -130,7 +143,7 @@ class ConfigurarMasterPage(ctk.CTkFrame):
         btn_row.grid_columnconfigure(1, weight=0)
         btn_row.grid_columnconfigure(2, weight=1)
 
-        self.btn_save = ctk.CTkButton(btn_row, text="Salvar Configuração do IP da IC", command=self._apply_save)
+        self.btn_save = ctk.CTkButton(btn_row, text="Salvar Configuração e reiniciar a IC:", command=self._apply_save)
         self.btn_save.grid(row=0, column=1, padx=(0, 8))
 
         self.btn_refresh = ctk.CTkButton(btn_row, text="Atualizar", width=110, command=self._request_all)
@@ -187,53 +200,66 @@ class ConfigurarMasterPage(ctk.CTkFrame):
 
 
     def _apply_save(self):
-        """Aplica alterações nos parâmetros de rede e no canal mesh."""
         if not getattr(self.conn, "get_is_connected", lambda: False)():
-            self.status.configure(text="Não conectado. Conecte-se para salvar.", text_color="red")
-            self._update_cards_visibility()
-            return
+            self.status.configure(text="Não conectado. Conecte-se para salvar.", text_color="red"); self._update_cards_visibility(); return
+        
+        cfg = IPv4Config(
+            dhcp=bool(self.dhcp_field.get()),
+            ip=self.ip_field.get().strip(),
+            netmask=self.netmask_field.get().strip(),
+            gateway=self.gateway_field.get().strip(),
+            dns1=self.dns1_field.get().strip(),
+            dns2=self.dns2_field.get().strip(),
+            hostname=self.hostname_field.get().strip(),
+        )
+        ok, err, cfg = IPv4ConfigValidator.validate(cfg)
+        if not ok:
+            self.status.configure(text=f"Erro: {err}", text_color="red"); return
+        try: mesh_channel = get_safe_int(self.mesh_channel_field.get())
+        except Exception: mesh_channel = None
+        cmds = build_srf16_sequence(cfg, mesh_ssid=self._mesh_ssid, mesh_pass=self._mesh_pass, mesh_channel=mesh_channel)
+        self._pending_summary = "; ".join(filter(None, [
+            "DHCP=on" if cfg.dhcp else f"IP fixo {cfg.ip}/{cfg.netmask} gw {cfg.gateway}",
+            f"DNS1 {cfg.dns1}" if cfg.dns1 else "",
+            f"DNS2 {cfg.dns2}" if cfg.dns2 else "",
+            f"host {cfg.hostname}" if cfg.hostname else "",
+            f"mesh canal {mesh_channel}" if mesh_channel else "",
+        ]))
+        if self._worker_running:
+            self.status.configure(text="Já existe um salvamento em andamento… aguarde."); return
+        self._verify_target = ({k: getattr(cfg, k) for k in ("ip","netmask","gateway","dns1","dns2","hostname") if getattr(cfg, k)} | {"dhcp": "0" if cfg.dhcp else "1"})
+        self._ack_event = threading.Event(); self._worker_running = True
+        self.status.configure(text=f"Salvando configurações… {self._pending_summary}")
+        threading.Thread(target=self._send_worker, args=(cmds,), daemon=True).start()
 
-        # DHCP (0=dinâmico, 1=fixed)
-        dyn = bool(self.dhcp_field.get())
-        dhcp_flag = "0" if dyn else "1"
-
-        # Hostname e IPs
-        host = self.hostname_field.get().strip()
-        ip   = self.ip_field.get().strip()
-        gw   = self.gateway_field.get().strip()
-        mask = self.netmask_field.get().strip()
-        dns1 = self.dns1_field.get().strip()
-        dns2 = self.dns2_field.get().strip()
-
-        # Se IP fixo, envia blocos 16,0..4 antes do 16,5
-        if not dyn:
-            for cmd in (f"SRF,16,0,{ip}\r",
-                        f"SRF,16,1,{gw}\r",
-                        f"SRF,16,2,{mask}\r"):
-                self.conn.send(cmd)
-            if dns1:
-                self.conn.send(f"SRF,16,3,{dns1}\r")
-            if dns2:
-                self.conn.send(f"SRF,16,4,{dns2}\r")
-
-        # Modo DHCP/fixo e hostname
-        self.conn.send(f"SRF,16,5,{dhcp_flag}\r")
-        if host:
-            self.conn.send(f"SRF,16,7,{host}\r")
-
-        # Canal Mesh (se possível)
+    def _send_worker(self, commands: list[str]):
+        import time
+        min_gap = 0.22
+        timeout = 3.0
+        last_ts = 0.0
         try:
-            canal = get_safe_int(self.mesh_channel_field.get())
-        except Exception:
-            canal = None
+            for raw in commands:
+                dt = time.monotonic() - last_ts
+                if dt < min_gap:
+                    time.sleep(min_gap - dt)
+                cmd = raw.rstrip("\r\n") + "\r"
+                if DEBUG: print(f"[CONFIG_MASTER] TX -> {cmd!r}")
+                ok = self.conn.send(cmd)
+                last_ts = time.monotonic()
+                if not ok:
+                    self.after(0, lambda: self.status.configure(text="Falha ao enviar. Verifique a conexão.", text_color="red"))
+                    break
+                if self._ack_event:
+                    got = self._ack_event.wait(timeout)
+                    self._ack_event.clear()
+                    if not got and DEBUG:
+                        print("[CONFIG_MASTER] timeout aguardando RRF para", raw)
+            # terminou a fila
+            self.after(0, lambda: self.status.configure(text="Comandos enviados. Aguardando verificação (16,9)…"))
+        finally:
+            self._worker_running = False
 
-        if canal and self._mesh_ssid and self._mesh_pass:
-            self.conn.send(f"SRF,15,0,0,{self._mesh_ssid},{self._mesh_pass},{canal}\r")
-        elif canal and (not self._mesh_ssid or not self._mesh_pass):
-            self.status.configure(text="Canal Mesh não aplicado: clique em Atualizar para obter SSID/senha.", text_color="red")
-            return
 
-        self.status.configure(text="Parâmetros enviados. Aguarde confirmações nos logs.")
 
     def _update_cards_visibility(self):
         """Mostra o card correto conforme estado da conexão."""
@@ -257,16 +283,6 @@ class ConfigurarMasterPage(ctk.CTkFrame):
     def _on_conn_event(self, ev: dict):
         # garantir thread-safe
         self.after(0, lambda e=ev: self._handle_ev(e))
-
-    def _handle_ev(self, ev: dict):
-        # t = ev.get("ts", "--:--:--.---")
-        typ = ev.get("type") # event types: connect, disconnect, tx, rx, error
-        buffer = ev.get("text")
-        buffer = str(buffer).strip()
-        if typ == "rx" and buffer:
-            # chegou dados, vamos processar dados
-            if buffer.startswith("RRF,15") or buffer.startswith("RRF,16"):
-                self._parse_SRF_income(buffer)
 
     def _handle_ev(self, ev: dict):
         typ = ev.get("type")  # connect, disconnect, tx, rx, error
@@ -298,39 +314,59 @@ class ConfigurarMasterPage(ctk.CTkFrame):
         else:
             self.status.configure(text= "Erro no envio, tente conectar primeiro.", text_color="red")
                  
-    def _parse_SRF_income(self, message: str) -> None:
-        if DEBUG:
-            print(f"[CONFIG_MASTER] RX: {message}")
-        parts = [p.strip() for p in message.split(",")]
-        if len(parts) < 3:
-            return
-        op, sub = parts[1], parts[2]
 
-        # 16,6 => rede/IP atual
-        if op == "16" and sub == "6" and len(parts) >= 11:
-            ip, netmask, gw, dns1, dns2, mac, dhcp, host = parts[3:11]
-            self.ip_field.delete(0, "end");      self.ip_field.insert(0, ip)
-            self.netmask_field.delete(0, "end"); self.netmask_field.insert(0, netmask)
-            self.gateway_field.delete(0, "end"); self.gateway_field.insert(0, gw)
-            self.dns1_field.delete(0, "end");    self.dns1_field.insert(0, dns1)
-            self.dns2_field.delete(0, "end");    self.dns2_field.insert(0, dns2)
+    def _parse_SRF_income(self, message: str) -> None:
+        if DEBUG: print(f"[CONFIG_MASTER] RX: {message}")
+
+        # ACK para o worker (RRF,15/16 liberam próximo envio)
+        if (message.startswith("RRF,15,") or message.startswith("RRF,16,")) and self._ack_event is not None:
+            try: self._ack_event.set()
+            except Exception: pass
+
+        # 16,6 => estado atual de rede
+        if self._p16_6.match(message):
+            snap = self._p16_6.parse(message)
+            if not snap: return
+            self.ip_field.delete(0,"end");      self.ip_field.insert(0, snap.ip)
+            self.netmask_field.delete(0,"end"); self.netmask_field.insert(0, snap.netmask)
+            self.gateway_field.delete(0,"end"); self.gateway_field.insert(0, snap.gateway)
+            self.dns1_field.delete(0,"end");    self.dns1_field.insert(0, snap.dns1)
+            self.dns2_field.delete(0,"end");    self.dns2_field.insert(0, snap.dns2)
             self.mac_field.configure(state="normal")
-            self.mac_field.delete(0, "end");     self.mac_field.insert(0, mac)
+            self.mac_field.delete(0,"end");     self.mac_field.insert(0, snap.mac)
             self.mac_field.configure(state="disabled")
-            # protocolo: 0 = DHCP dinâmico ; 1 = IP fixo
-            self.dhcp_field.select() if dhcp == "0" else self.dhcp_field.deselect()
+            self.dhcp_field.select() if snap.dhcp_flag == "0" else self.dhcp_field.deselect()
             self._on_toggle_dhcp()
-            self.hostname_field.delete(0, "end"); self.hostname_field.insert(0, host)
+            self.hostname_field.delete(0,"end"); self.hostname_field.insert(0, snap.hostname)
             self.status.configure(text="Dados de rede carregados.")
             return
 
-        # 15,10 => configuração da master (mesh)
-        if op == "15" and sub == "10" and len(parts) >= 6:
-            canal, ssid, senha = parts[3:6]
-            self.mesh_channel_field.delete(0, "end"); self.mesh_channel_field.insert(0, canal)
-            self._mesh_ssid, self._mesh_pass = ssid, senha
-            self.status.configure(text="Configuração da rede Mesh carregada.")
+        # 16,9 => preview próximo boot (confere e reinicia)
+        if self._p16_9.match(message) and self._verify_target:
+            snap = self._p16_9.parse(message)
+            if snap:
+                got = {"ip":snap.ip,"netmask":snap.netmask,"gateway":snap.gateway,
+                    "dns1":snap.dns1,"dns2":snap.dns2,"dhcp":snap.dhcp_flag,"hostname":snap.hostname}
+                ok = all(str(got.get(k,"")) == str(v) for k,v in self._verify_target.items() if v not in (None,""))
+                if ok:
+                    summary = self._pending_summary or "configurações"
+                    self.status.configure(text=f"Configurações salvas: {summary}. Reiniciando a master…")
+                    self.conn.send("SRF,16,8\r")
+                else:
+                    self.status.configure(text="Aviso: 16,9 diferente do solicitado. Confira IP/DHCP/Host.", text_color="red")
+            self._verify_target = None
             return
+
+        # 15,10 => dados da mesh
+        if message.startswith("RRF,15,10,"):
+            parts = [p.strip() for p in message.split(",")]
+            if len(parts) >= 6:
+                canal, ssid, senha = parts[3:6]
+                self.mesh_channel_field.delete(0,"end"); self.mesh_channel_field.insert(0, canal)
+                self._mesh_ssid, self._mesh_pass = ssid, senha
+                self.status.configure(text="Configuração da rede Mesh carregada.")
+            return
+
 
 
 """ protocolo comandos iluflex para configuração da master 

@@ -1,2 +1,9 @@
-customtkinter>=5.2.2
-pillow>=10.0
+# UI
+customtkinter>=5.2.0
+
+# Imagens
+pillow>=10.0.0
+
+# (Opcional) O customtkinter costuma depender de darkdetect; na maioria dos casos vem como dependência transitiva.
+# Inclua explicitamente se estiver empacotando com PyInstaller/poetry e quiser garantir:
+darkdetect>=0.8.0

@@ -15,6 +15,7 @@ from iluflex_tools.ui.pages.configurar_master import ConfigurarMasterPage
 from iluflex_tools.ui.pages.configuracoes import PreferenciasPage
 from iluflex_tools.ui.pages.ajuda import AjudaPage
 from iluflex_tools.core.app_state import STATE
+from iluflex_tools.widgets.icon import setup_window_icon
 
 MENU_ITEMS = [
     ("INICIO", "dashboard", "🏠"),
@@ -34,6 +35,7 @@ class MainApp(ctk.CTk):
         # ... load_settings/theme ...
         STATE.sync_from_settings() # inicializa a partir de settings
         apply_theme() # fallback inicial (mantém comportamento atual)
+        setup_window_icon(self)  # ícone na titlebar/taskbar
         self.title("iLuFlex Tools")
         self.geometry("900x720")
         self.minsize(800, 500)

@@ -420,7 +420,7 @@ class ComandosIRPage(ctk.CTkFrame):
                 
                 self.update_preproc_overlay(normalizedCmd)
             else:
-                self.status.configure(text=f"Captura inválida ou falha na conversão. {normalizedCmd.get("error", "")}", text_color="red")
+                self.status.configure(text=f"Captura inválida ou falha na conversão. {normalizedCmd.get('error', '')}", text_color="red")
                 self.ir_command_pre_process = ""
         except Exception as e:
             if DEBUG: print("Pré-processamento", f"Erro ao reprocessar: {e}")

@@ -54,7 +54,7 @@ class Header(ctk.CTkFrame):
         elif typ == "disconnect":
             self.status_text.configure(text=f"Desconectado")
         elif typ == "error":
-            self.status_text.configure(text=f"Erro: {ev.get("text")}")
+            self.status_text.configure(text=f"Erro: {ev.get('text')}")
         else:
             if DEBUG: print(f"[HEADER] Connect event desconhecido => {typ}")
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os
+import json, os, tempfile
 from dataclasses import dataclass, asdict, fields
 
 
@@ -11,8 +11,11 @@ class Settings:
     last_ip: str = "192.168.1.70"
     last_port: int = 4999
 
-APP_DIR = os.path.join(os.path.expanduser("~"), ".iluflex_tools")
-SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
+#APP_DIR = os.path.join(os.path.expanduser("~"), ".iluflex_tools")
+#SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
+
+SETTINGS_PATH = os.path.join(tempfile.gettempdir(), 'iluflex_tools.json')
+
 
 def _coerce(value, typ, default):
     """Coerção defensiva para tipos simples (int, float, str)."""
@@ -46,6 +49,6 @@ def load_settings() -> Settings:
 
 def save_settings(s: Settings) -> None:
     """Grava settings no disco (cria pasta se necessário)."""
-    os.makedirs(APP_DIR, exist_ok=True)
+    if os.path.exists(SETTINGS_PATH): exist_ok=True
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(asdict(s), f, ensure_ascii=False, indent=2)

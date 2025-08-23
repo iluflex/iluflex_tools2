@@ -6,7 +6,7 @@ from iluflex_tools.widgets.page_title import PageTitle
 from iluflex_tools.core.validators import get_safe_int
 from iluflex_tools.core.app_state import STATE
 
-DEBUG = True
+DEBUG = False
 
 TABLE_FONT_SIZE = 12
 
@@ -142,17 +142,17 @@ class ConexaoPage(ctk.CTkFrame):
             # precisa desconectar, esperar um pouco, e reconectar.
 
         def worker():
-            if DEBUG: print("[ConexaoPage worker] start worker")
+            # if DEBUG: print("[ConexaoPage worker] start worker")
             ok = self._conn.connect(ip, port)
             # se precisar atualizar a UI após terminar:
-            self.after(0, lambda: print(f"[ConexaoPage worker] end: ({ip}:{port}) -> ok: {ok}"))
+            # self.after(0, lambda: print(f"[ConexaoPage worker] end: ({ip}:{port}) -> ok: {ok}"))
 
         threading.Thread(target=worker, daemon=True).start()
 
         # aplica estado desejado do switch após conectar (ou manter tentando, se falhou)
         try:
             self._conn.enable_auto_reconnect(desired_auto)
-            if DEBUG: print(f"[ConexaoPage worker] desired auto reconnect: ({desired_auto})")
+            # if DEBUG: print(f"[ConexaoPage worker] desired auto reconnect: ({desired_auto})")
         except Exception as e:
             if DEBUG: print("[ConexaoPage] Erro ao aplicar estado do auto-reconnect:", e)
 
@@ -264,13 +264,14 @@ class ConexaoPage(ctk.CTkFrame):
 
     # called by main_app.navigate when the page becomes visible
     def on_page_activated(self):
-        print(f"[PAGINA CONEXAO] on page activated: STATE ip:{STATE.data.ip} port:{STATE.data.port}")
+        if DEBUG: print(f"[PAGINA CONEXAO] on page activated: STATE ip:{STATE.data.ip} port:{STATE.data.port}")
         self.ip_entry_var.set(STATE.data.ip)
         self.port_entry_var.set(str(STATE.data.port))
         if STATE.data.auto_reconnect:
             self.auto_reconnect_switch.select()
         else:
             self.auto_reconnect_switch.deselect()
+        self._buscar() # Busca ic´s na rede assim que carregar a página.
 
     # called by main_app.navigate when the page is hidden
     #def on_page_deactivated(self):

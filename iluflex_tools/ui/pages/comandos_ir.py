@@ -441,9 +441,6 @@ class ComandosIRPage(ctk.CTkFrame):
             chaves usadas: equal_frames_detected, pairs_preserved, new_sir2
         sir2_opt: string 'sir,2,...' otimizada (fallback para calcular duração/pulsos)
         """
-
-        iguais = 0
-        pares = 0
         sir2 = None
 
         if meta:

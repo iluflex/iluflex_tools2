@@ -5,6 +5,8 @@ from typing import Callable, List, Dict, Any
 import time
 import re
 
+DEBUG = False
+
 # --------- Conexão TCP ---------
 class ConnectionService:
     """
@@ -70,7 +72,7 @@ class ConnectionService:
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(timeout)
-            print(f"[CONNECT] tentando {ip}:{port} ...")
+            if DEBUG: print(f"[CONNECT] tentando {ip}:{port} ...")
             s.connect((ip, port))
             s.settimeout(0.5)
             self._sock = s
@@ -80,11 +82,11 @@ class ConnectionService:
             self._rx_thread.start()
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "connect", "ts": ts, "remote": self._remote})
-            print(f"[CONNECT] OK -> {ip}:{port}")
+            if DEBUG: print(f"[CONNECT] OK -> {ip}:{port}")
             return True
         except Exception as e:
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            print(f"{ts} [CONNECT] falhou: {e}")
+            if DEBUG: print(f"{ts} [CONNECT] falhou: {e}")
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"connexão falhou: {e}"})
             self._sock = None
             self.connected = False
@@ -130,7 +132,7 @@ class ConnectionService:
     def disconnect(self):
         if self._sock:
             try:
-                print("[DISCONNECT] encerrando conexão ...")
+                if DEBUG: print("[DISCONNECT] encerrando conexão ...")
                 self._stop.set()
                 try:
                     self._sock.shutdown(socket.SHUT_RDWR)
@@ -160,7 +162,7 @@ class ConnectionService:
                 data = self._sock.recv(4096)
                 last_rx_time = time.monotonic()
                 if not data:
-                    print("[RX] conexão encerrada pelo remoto")
+                    if DEBUG: print("[RX] conexão encerrada pelo remoto")
                     break
                 self._rx_buffer.extend(data)
                 while True:
@@ -184,7 +186,7 @@ class ConnectionService:
                         del self._rx_buffer[:idx + 1]
                     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     text = msg.decode("utf-8", errors="replace")
-                    print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
+                    if DEBUG: print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
                     self._emit({"type": "rx", "ts": ts, "remote": self._remote, "text": text, "raw": msg})
             except socket.timeout:
                 pass
@@ -200,7 +202,7 @@ class ConnectionService:
                 self._rx_buffer.clear()
                 ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 text = msg.decode("utf-8", errors="replace")
-                print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
+                if DEBUG: print(f"[{ts}] RX {self._remote[0]}:{self._remote[1]} -> {text}")
                 self._emit({"type": "rx", "ts": ts, "remote": self._remote, "text": text, "raw": msg})
                 last_rx_time = time.monotonic()
 
@@ -209,7 +211,7 @@ class ConnectionService:
     # ---- envio ----
     def send(self, data) -> bool:
         if not self.connected or not self._sock:
-            print("[TX] não conectado.")
+            if DEBUG: print("[TX] não conectado.")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": "eviar sem conexão."})
             return False
@@ -217,19 +219,19 @@ class ConnectionService:
             payload = data.encode("utf-8") if isinstance(data, str) else bytes(data)
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             dbg = payload.decode("utf-8", errors="replace")
-            print(f"[{ts}] TX -> {dbg}")
+            if DEBUG: print(f"[{ts}] TX -> {dbg}")
             self._sock.sendall(payload)
             self._emit({"type": "tx", "ts": ts, "remote": self._remote, "text": dbg, "raw": payload})
             return True
         except (BrokenPipeError, ConnectionResetError, OSError) as e:
-            print(f"[TX] erro: {e}")
+            if DEBUG: print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
             # garantir que listeners recebam o evento de disconnect
             self.disconnect()
             return False
         except Exception as e:
-            print(f"[TX] erro: {e}")
+            if DEBUG: print(f"[TX] erro: {e}")
             ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             self._emit({"type": "error", "ts": ts, "remote": self._remote, "text": f"tx error: {e}"})
             self.disconnect()
@@ -396,7 +398,7 @@ def parse_rrf10_line(line: str) -> dict | None:
     parts = [p.strip() for p in line.split(",")]
     # layout mínimo: 13 campos
     if len(parts) < 13:
-        print(f"parse_rrf10_line faltou elementos, tem só {len(parts)}")
+        if DEBUG: print(f"parse_rrf10_line faltou elementos, tem só {len(parts)}")
         return None
 
     try:
@@ -437,7 +439,7 @@ def parse_rrf10_line(line: str) -> dict | None:
             "raw": line,
         }
     except Exception as e:
-        print("parse_rrf10_line error:", e)
+        if DEBUG: print("parse_rrf10_line error:", e)
         return None
 
 

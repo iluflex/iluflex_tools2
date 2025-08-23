@@ -52,8 +52,6 @@ class Header(ctk.CTkFrame):
             self.status_text.configure(text=f"Conectando... {ip}:{port}")
 
         elif typ == "disconnect":
-            # mantém info do último remoto, útil para o usuário
-            suffix = f" {ip}:{port}" if ip else ""
             self.status_text.configure(text=f"Desconectado")
         elif typ == "error":
             self.status_text.configure(text=f"Erro: {ev.get("text")}")

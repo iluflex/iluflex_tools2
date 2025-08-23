@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json, os
 from dataclasses import dataclass, asdict, fields
-from typing import Any
 
 
 @dataclass

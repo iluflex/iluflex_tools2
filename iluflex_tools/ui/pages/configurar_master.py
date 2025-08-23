@@ -6,7 +6,7 @@ from iluflex_tools.core.protocols import IPv4Config, IPv4ConfigValidator, build_
 from iluflex_tools.core.protocols.rrf16 import RRF16_6Parser, RRF16_9Parser
 from iluflex_tools.core.app_state import STATE
 
-DEBUG = True
+DEBUG = False
 
 class ConfigurarMasterPage(ctk.CTkFrame):
 
@@ -70,7 +70,7 @@ class ConfigurarMasterPage(ctk.CTkFrame):
 
         # Cartão principal
         self.card_main = ctk.CTkFrame(self, corner_radius=10)
-        self.card_main.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.card_main.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
         for col in (0, 1, 2):
             self.card_main.grid_columnconfigure(col, weight=1)
 
@@ -272,9 +272,9 @@ class ConfigurarMasterPage(ctk.CTkFrame):
             connected = False
         if connected:
             self.card_hint.grid_remove()
-            self.card_main.grid()
+            # self.card_main.grid()
         else:
-            self.card_main.grid_remove()
+            # self.card_main.grid_remove()
             self.card_hint.grid()
 
 

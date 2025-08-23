@@ -349,8 +349,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             if getattr(self, "_discover_after", None):
                 try: self.after_cancel(self._discover_after)
                 except Exception as e: 
-                    if DEBUG: 
-                        print(e)
+                    if DEBUG: print(e)
                 pass
                 self._discover_after = None
             self.discover_progress.set(0)
@@ -590,7 +589,6 @@ class GestaoDispositivosPage(ctk.CTkFrame):
 
     # --- editor in-place simples e confiável (tk.Entry como filho do Treeview) ---
     def _start_cell_edit(self, tree, row_iid: str, col_idx: int, col_name: str) -> None:
-        import tkinter as tk
 
         # Fecha editor anterior, se houver
         if self._cell_editor is not None:

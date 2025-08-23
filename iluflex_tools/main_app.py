@@ -1,9 +1,8 @@
 import customtkinter as ctk
-from tkinter import ttk
 
 from iluflex_tools.theming.theme import apply_theme
 from iluflex_tools.core.services import ConnectionService, OtaService, NetworkService
-from iluflex_tools.core.settings import load_settings, save_settings
+from iluflex_tools.core.settings import load_settings
 from iluflex_tools.ui.header import Header
 from iluflex_tools.ui.sidebar import Sidebar
 from iluflex_tools.ui.pages.dashboard import DashboardPage

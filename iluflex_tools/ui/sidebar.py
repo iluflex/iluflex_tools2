@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from iluflex_tools.widgets.menu_button import menuButton
 
 FG_BASE      = ("#E5E7EB", "#1F2937")
 FG_ACTIVE    = ("#CBD5E1", "#334155")
@@ -22,16 +23,20 @@ class Sidebar(ctk.CTkFrame):
         self._apply_width()
 
     def _build(self):
-        for idx, (label, key, icon) in enumerate(self.menu_items):
-            txt = icon if self.collapsed else f"{icon}  {label}"
-            anchor = "center" if self.collapsed else "w"
-            btn = ctk.CTkButton(
-                self, text=txt, anchor=anchor,
+        for idx, (label, key, icon_name) in enumerate(self.menu_items):
+            btn = menuButton(
+                self,
+                text=label,
+                icon=icon_name,                  # <- nome do arquivo base (ex.: "server-cog")
+                colapsed=self.collapsed,         # aceita 'colapsed' (typo) ou 'collapsed'
+                anchor=("center" if self.collapsed else "w"),
                 fg_color=FG_BASE, hover_color=FG_HOVER, text_color=TEXT_COLOR,
-                command=lambda k=key: self.on_nav and self.on_nav(k)
+                command=lambda k=key: self.on_nav and self.on_nav(k),
+                size_expanded=28, 
+                size_collapsed=28
             )
             btn.grid(row=idx, column=0, sticky="ew", padx=6, pady=4)
-            self._buttons[key] = (btn, label, icon)
+            self._buttons[key] = (btn, label, icon_name)
         self.grid_columnconfigure(0, weight=1)
 
     def _target_width(self):
@@ -51,7 +56,7 @@ class Sidebar(ctk.CTkFrame):
         if self.collapsed == collapsed:
             return
         self.collapsed = collapsed
-        for _, (btn, label, icon) in self._buttons.items():
-            btn.configure(text=icon if collapsed else f"{icon}  {label}",
-                          anchor="center" if collapsed else "w")
+        for _, (btn, label, _icon_name) in self._buttons.items():
+            # o widget já cuida de texto/compound/anchor
+            btn.set_collapsed(collapsed, text=label)
         self._apply_width()

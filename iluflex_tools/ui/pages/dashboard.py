@@ -1,7 +1,9 @@
 import customtkinter as ctk
 from PIL import Image
-import os
+import os, sys
 from iluflex_tools.widgets.page_title import PageTitle
+from iluflex_tools.widgets.menu_button import ctk_imageLight
+from pathlib import Path
 
 class DashboardPage(ctk.CTkFrame):
     """
@@ -45,37 +47,61 @@ class DashboardPage(ctk.CTkFrame):
         # cria os botões uma única vez (regridamos depois conforme nº de colunas)
         # obtem dados de MENU_ITEMS definido no main_app.py
         self.shortcut_buttons = []
-        for idx, (label, route, icon) in enumerate(self.menu_items):
-            text = f"{icon}  {label}"
-            b = ctk.CTkButton(
-                self.grid_wrap,
-                text=text,
-                height=52,
-                width=260,            # evita “esticar” demais
-                command=lambda r=route: self.on_quick_nav(r),
-            )
-            self.shortcut_buttons.append(b)
+
+        try:
+
+            for idx, (label, route, icon_name) in enumerate(self.menu_items):
+                img = ctk_imageLight(icon_name, size=28)  # use 24 se preferir menor
+                b = ctk.CTkButton(
+                    self.grid_wrap,
+                    text=label,
+                    image=img,           # << ícone real
+                    compound="left",     # ícone à esquerda do texto
+                    height=52,
+                    width=260,           # mantém o mesmo “piso” de largura
+                    command=lambda r=route: self.on_quick_nav(r),
+                    # (opcional) se quiser padronizar o visual:
+                    # fg_color="#FFFFFF", hover_color="#F1F5F9", text_color="#111827",
+                    # anchor="w",
+                )
+                self.shortcut_buttons.append(b)
+        except Exception as e:
+            print(f"[DASHBOARD] Exception: {e}")
+        pass
 
         # primeira disposição
         self._layout_shortcuts(cols=3)
 
+    def _base_dir(self):
+        # Alinha com o menu_button.py: no bundle, os dados ficam em _MEIPASS/iluflex_tools
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            return Path(sys._MEIPASS) / "iluflex_tools"
+        # dev: .../iluflex_tools
+        return Path(__file__).resolve().parents[1]
+
     def _build_logo(self):
-        # tenta carregar imagem; senão, usa texto
-        path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "iluflex_logo_1500x750.png"))
-        if os.path.exists(path):
-            self._logo_img = Image.open(path)
-            # tamanho inicial (1/3 de 1200px ~ 400px)
-            self._logo_ctk = ctk.CTkImage(light_image=self._logo_img, dark_image=self._logo_img, size=(400, 200))
-            self.logo_label = ctk.CTkLabel(self, image=self._logo_ctk, text="", bg_color="#F5F6F8")
+        base = self._base_dir()
+        # 1º tenta em ui/ (layout novo), 2º tenta na raiz (retrocompat.)
+        candidates = [
+            base / "ui" / "iluflex_logo_1500x750.png",
+            base / "iluflex_logo_1500x750.png",
+        ]
+        for p in candidates:
+            if p.exists():
+                self._logo_img = Image.open(p)
+                # tamanho inicial (1/3 da largura ≈ 400px), mantém proporção
+                w0 = 400
+                aspect = self._logo_img.height / self._logo_img.width
+                h0 = int(w0 * aspect)
+                self._logo_ctk = ctk.CTkImage(light_image=self._logo_img, dark_image=self._logo_img, size=(w0, h0))
+                self.logo_label = ctk.CTkLabel(self, image=self._logo_ctk, text="", bg_color="#F5F6F8")
+                break
         else:
+            # fallback sem travar
             self.logo_label = ctk.CTkLabel(
-                self,
-                text="iluflex",
-                font=ctk.CTkFont(size=28, weight="bold"),
-                text_color="#0B1220",
-                bg_color="#F5F6F8",
+                self, text="iluflex", font=ctk.CTkFont(size=28, weight="bold"),
+                text_color="#0B1220", bg_color="#F5F6F8",
             )
-        # posiciona o logo um pouco acima dos atalhos
         self.logo_label.grid(row=1, column=0, pady=(8, 2), sticky="n")
 
     # ------------------ LAYOUT ------------------

@@ -16,6 +16,11 @@ C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe main.py
 ```
 ## Comandos para gerar executável com Installer
 pyinstaller --noconsole --onefile --icon "iluflex_tools/ui/iluflex-tools-icon.ico" --add-data "iluflex_tools/ui/iluflex-tools-icon.ico;." main.py
+pyinstaller -y IluflexTools.spec
+
+pyinstaller -y IluflexTools_28px_debug.spec
+
+Com icones, precisa incluir mais coisas.
 
 ## Status LED
 

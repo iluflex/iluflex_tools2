@@ -72,7 +72,7 @@ class ConfigurarMasterPage(ctk.CTkFrame):
         self.card_main = ctk.CTkFrame(self, corner_radius=10)
         self.card_main.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
         for col in (0, 1, 2):
-            self.card_main.grid_columnconfigure(col, weight=1)
+            self.card_main.grid_columnconfigure(col, weight=1, uniform="cols", minsize=240)
 
         # Texto introdutório
         ctk.CTkLabel(

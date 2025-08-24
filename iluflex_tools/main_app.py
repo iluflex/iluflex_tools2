@@ -17,16 +17,17 @@ from iluflex_tools.ui.pages.ajuda import AjudaPage
 from iluflex_tools.core.app_state import STATE
 from iluflex_tools.widgets.icon import setup_window_icon
 
+
 MENU_ITEMS = [
-    ("INICIO", "dashboard", "🏠"),
-    ("CONEXÃO", "conexao", "🔌"),
-    ("GESTÃO DE DISPOSITIVOS", "gestao_dispositivos", "🗂"),
-#    ("ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade", "⬆"),
-    ("COMANDOS IR", "comandos_ir", "📡"),
-#    ("INTERFACE DE PROGRAMAÇÃO", "interface_programacao", "🛠"),
-    ("CONFIGURAR MASTER", "configurar_master", "⚙"),
-    ("PREFERÊNCIAS", "preferencias", "⚙️"),
-    ("AJUDA", "ajuda", "❓"),
+    ("INICIO", "dashboard", "dashboard"),
+    ("CONEXÃO", "conexao", "connect"),
+    ("GESTÃO DE DISPOSITIVOS", "gestao_dispositivos", "mesh-network"),
+    ("COMANDOS IR", "comandos_ir", "ircontrol"),
+    ("CONFIGURAR MASTER", "configurar_master", "server-cog"),
+    #    ("INTERFACE DE PROGRAMAÇÃO", "interface_programacao", "🛠"),
+    #    ("ATUALIZAÇÃO DE FIRMWARE", "fw_upgrade", "⬆"),
+    ("PREFERÊNCIAS", "preferencias", "sliders"),
+    ("AJUDA", "ajuda", "question-mark"),
 ]
 
 class MainApp(ctk.CTk):

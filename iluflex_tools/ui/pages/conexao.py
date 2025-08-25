@@ -136,7 +136,7 @@ class ConexaoPage(ctk.CTkFrame):
         # evitar corrida: desliga auto enquanto troca de conexão (inclui duplo clique já conectado)
         self._conn.enable_auto_reconnect(False)
 
-        if self._conn.get_is_connected:
+        if self._conn.get_is_connected():
             # se já está conectado em outro host, não reconecta.
             if DEBUG: print(f"[ConexaoPage] no _connect detectou conexão anterior")
             # precisa desconectar, esperar um pouco, e reconectar.

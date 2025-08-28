@@ -14,15 +14,15 @@ import customtkinter as ctk
 # =============================================================================
 _THEME_COLORS: dict[str, dict[str, str]] = {
     "light": {
-        "bg": "#7A7A7A",
+        "bg": "#F3F3F3",
         "fg": "#111111",
         # Grid (borda, luz, sombra)
-        "grid_border": "#d0d0d0",
-        "grid_light": "#e6e6e6",
-        "grid_dark": "#c0c0c0",
+        "grid_border": "#BCBCBC",
+        "grid_light": "#9F9F9F",
+        "grid_dark": "#678892",
         # Cabeçalho (um pouco mais cinza que o corpo)
-        "header_bg": "#A8A8A8",
-        "header_hover_bg": "#d9d9d9",
+        "header_bg": "#C4C4C4",
+        "header_hover_bg": "#ADADAD",
         # Hover de linha
         "row_hover_bg": "#DAEBFF",
         # Zebra
@@ -152,6 +152,9 @@ class ColumnToggleTree(ctk.CTkFrame):
     # ---------- helpers de tema ----------
     def _pick_ttk_theme(self) -> str:
         # Mantém lógica próxima ao original (vista no Windows claro; clam no demais/escuro)
+        # O tema "vista" ignora cores do Treeview.Heading no Windows.
+        # Use "clam" para permitir personalização real.
+        return "clam"
         sys = platform.system().lower()
         try:
             mode = ctk.get_appearance_mode()
@@ -228,7 +231,7 @@ class ColumnToggleTree(ctk.CTkFrame):
         self._style.configure(self._style_hd, **hd_kwargs)
         self._style.map(
             self._style_hd,
-            background=[("active", pal["header_bg"])],
+            background=[("active", pal["header_hover_bg"])],
             relief=[("pressed", "flat"), ("!pressed", "flat")],
         )
         # fallback no estilo padrão

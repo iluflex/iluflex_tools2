@@ -47,7 +47,7 @@ class PreferenciasPage(ctk.CTkFrame):
         ctk.CTkLabel(self.mainFrame, text="").grid(row=0, column=2, padx=(8, 12), pady=(10, 6))
 
         # linha 1: tempo de busca (ms)
-        ctk.CTkLabel(self.mainFrame, text="Tempo padrão de busca de interfaces (ms)", anchor="e").grid(
+        ctk.CTkLabel(self.mainFrame, text="Tempo padrão de busca de interfaces na LAN (ms)", anchor="e").grid(
             row=1, column=0, padx=(12, 8), pady=6, sticky="e"
         )
         self.timeout_ms_entry = ctk.CTkEntry(self.mainFrame, width=NUM_WIDTH, placeholder_text="5000")
@@ -55,7 +55,7 @@ class PreferenciasPage(ctk.CTkFrame):
         ctk.CTkLabel(self.mainFrame, text="Padrão: 5000. ").grid(row=1, column=2, padx=(8, 12), pady=6)
 
         # linha 2: tempo de cadastro (s)
-        ctk.CTkLabel(self.mainFrame, text="Tempo padrão de cadastro de novos dispositivos (segundos)", anchor="e").grid(
+        ctk.CTkLabel(self.mainFrame, text="Tempo padrão de procura de novos dispositivos na rede mesh (segundos)", anchor="e").grid(
             row=2, column=0, padx=(12, 8), pady=6, sticky="e"
         )
         self.discover_timeout_entry = ctk.CTkEntry(self.mainFrame, width=NUM_WIDTH, placeholder_text="120")

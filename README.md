@@ -11,27 +11,14 @@
 Abra um PowerShell nesta pasta e rode UM dos comandos abaixo (escolha o seu `python.exe`):
 
 1) sem venv, apontando direto para o seu python.exe
-C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe -m pip install -r requirements.txt --user
+C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe -m pip install -r requirements.txt
 C:/Users/SEUUSER/AppData/Local/Programs/Python/Python313/python.exe main.py
 ```
 ## Comandos para gerar executável com Installer
 pyinstaller --noconsole --onefile --icon "iluflex_tools/ui/iluflex-tools-icon.ico" --add-data "iluflex_tools/ui/iluflex-tools-icon.ico;." main.py
-pyinstaller -y IluflexTools.spec
 
 pyinstaller -y IluflexTools_28px_debug.spec
+pyinstaller -y IluflexTools_28px_release.spec
 
 Com icones, precisa incluir mais coisas.
-
-## Status LED
-
-Para exibir o estado da conexão em qualquer página, use o widget `StatusLed`.
-
-```python
-from iluflex_tools.widgets.status_led import StatusLed
-
-led = StatusLed(parent)
-led.bind_conn(conn)  # instância de ConnectionService
-```
-
-O LED fica verde quando conectado e vermelho ao desconectar.
 

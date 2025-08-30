@@ -36,6 +36,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self._discover_after: str | None = None
         self._discover_end_time: float = 0.0
         self._discover_timeout: int = 0
+        # timer separado para atualizar o texto (contador) no botão
+        self._discover_after_text: str | None = None
 
         # Estado local indexado por MAC
         self._rows_by_mac: Dict[str, Dict] = {}
@@ -112,7 +114,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             {"key": "Nome", "width": 220},
             {"key": "FW", "width": 70},
             {"key": "HW", "width": 70},
-            {"key": "Conectado a", "width": 150},
+            {"key": "Uplink", "width": 150},
             {"key": "Sinal (dB)", "width": 70},
         ]
         
@@ -160,7 +162,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         self.stopDiscoverBtn.grid_remove()  # oculto inicialmente
 
         # Oculta colunas de detalhes
-        for col in ("FW", "HW", "Conectado a", "Sinal (dB)"):
+        for col in ("FW", "HW", "Uplink", "Sinal (dB)"):
             try:
                 self.table._toggle_col(col)
             except Exception:
@@ -183,7 +185,8 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 end_ts = float(started) + float(max(timeout, 1))
                 remaining = end_ts - time.time()
                 if remaining > 0:
-                    self.discoverDevicesBtn.configure(text="Procurando…")
+                    secs = int(max(remaining, 0))
+                    self.discoverDevicesBtn.configure(text=f"Procurando ({secs} s)")
                     try:
                         self.stopDiscoverBtn.grid()
                     except Exception:
@@ -191,6 +194,13 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                     self._discover_timeout = max(timeout, 1)
                     self._discover_end_time = end_ts
                     self._discover_after = self.after(100, self._update_discover_progress)
+
+                    # inicia/retoma o contador de 1s no texto do botão
+                    if self._discover_after_text:
+                        try: self.after_cancel(self._discover_after_text)
+                        except Exception: pass
+                    self._discover_after_text = self.after(1000, self._tick_discover_countdown)
+
                 else:
                     # expirado → limpar persistência
                     self._settings.discovery_started_at = None
@@ -216,7 +226,10 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             if not mac:
                 continue  # ignoramos sem MAC
             last_mac = mac
-            parent_mac = (d.get("parent_mac") or "").lower()
+            parent_raw = d.get("parent_mac")
+            # preserva 0 como "0" e evita .lower() em tipos não-str
+            parent_mac = "" if parent_raw is None else str(parent_raw).strip().lower()
+
             row = {
                 "Slave ID": d.get("slave_id", ""),
                 "Mac Address": mac,
@@ -224,7 +237,7 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 "Nome": d.get("nome", ""),
                 "FW": d.get("versao_fw", ""),
                 "HW": d.get("versao_hw", ""),
-                "Conectado a": parent_mac,
+                "Uplink": parent_mac,
                 "Sinal (dB)": d.get("sinal_db", ""),
             }
             # upsert por MAC no estado local
@@ -312,10 +325,16 @@ class GestaoDispositivosPage(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _on_conn_event(self, ev: dict):
         try:
-            if ev.get("type") != "rx":
+            ev_type = str(ev.get("type") or "")
+            # Atualiza lista automaticamente quando a conexão é (re)estabelecida
+            if ev_type == "connect":
+                self.after(0, self._on_click_atualizar)
                 return
-            text = ev.get("text") or ""
-            
+
+            if ev_type != "rx":
+                return
+
+            text = ev.get("text") or ""       
             # --- ACK do comando SRF,15,9,<tempo> ---
             if "RRF,15,9," in text:
                 for m in re.finditer(r"RRF,15,9,(\d+)", text):
@@ -351,7 +370,11 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 except Exception as e: 
                     if DEBUG: print(e)
                 pass
-                self._discover_after = None
+            self._discover_after = None
+            if getattr(self, "_discover_after_text", None):
+                try: self.after_cancel(self._discover_after_text)
+                except Exception: pass
+            self._discover_after_text = None
             self.discover_progress.set(0)
             self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
             # esconder botão de parar a busca
@@ -410,18 +433,27 @@ class GestaoDispositivosPage(ctk.CTkFrame):
         except Exception as e:
             if DEBUG: print("Procurar Dispositivos Error: ", e)
 
-        # reinicia contagem e barra de progresso
+        # reinicia contagem e barra de progresso e contador de texto
         if self._discover_after:
             try:
                 self.after_cancel(self._discover_after)
             except Exception:
                 pass
             self._discover_after = None
-        self.discoverDevicesBtn.configure(text="Procurando…")
+
+        if self._discover_after_text:
+            try: self.after_cancel(self._discover_after_text)
+            except Exception: pass
+            self._discover_after_text = None
+
         self.discover_progress.set(0)
         self._discover_timeout = max(timeout, 1)
         self._discover_end_time = time.time() + self._discover_timeout
         self._discover_after = self.after(100, self._update_discover_progress)
+
+         # texto inicial com contador
+        self.discoverDevicesBtn.configure(text=f"Procurando ({int(self._discover_timeout)} s)")
+        self._discover_after_text = self.after(1000, self._tick_discover_countdown)
 
         # mostrar botão Parar Busca ao iniciar
         self.stopDiscoverBtn.grid()
@@ -444,10 +476,27 @@ class GestaoDispositivosPage(ctk.CTkFrame):
             self.discover_progress.set(0)
             self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
             self._discover_after = None
+            # encerra contador de texto, se ainda estiver ativo
+            if self._discover_after_text:
+                try: self.after_cancel(self._discover_after_text)
+                except Exception: pass
+                self._discover_after_text = None
             # esconder ao concluir automaticamente
             self.stopDiscoverBtn.grid_remove()
         else:
             self._discover_after = self.after(100, self._update_discover_progress)
+
+
+    def _tick_discover_countdown(self):
+        """Atualiza o texto do botão com o tempo restante (a cada 1s)."""
+        remaining = self._discover_end_time - time.time()
+        if remaining <= 0:
+            self.discoverDevicesBtn.configure(text="Procurar Dispositivos")
+            self._discover_after_text = None
+            return
+        secs = int(max(remaining, 0))
+        self.discoverDevicesBtn.configure(text=f"Procurando ({secs} s)")
+        self._discover_after_text = self.after(1000, self._tick_discover_countdown)
 
     def _style_discover_progress(self):
         try:
@@ -464,6 +513,11 @@ class GestaoDispositivosPage(ctk.CTkFrame):
                 self.discoverDevicesBtn.configure(text="Parando…")
             except Exception:
                 pass
+            # interrompe contador do texto para não sobrescrever "Parando…"
+            if self._discover_after_text:
+                try: self.after_cancel(self._discover_after_text)
+                except Exception: pass
+                self._discover_after_text = None
             if callable(self._send):
                 self._send("SRF,15,9\r")
         except Exception:

@@ -397,10 +397,12 @@ class ColumnToggleTree(ctk.CTkFrame):
 
         def _key(iid):
             vals = self.tree.item(iid, "values")
+            v = vals[idx] if idx < len(vals) else ""
             try:
-                return float(vals[idx])
+                return (0, float(v))                # numéricos juntos
             except Exception:
-                return str(vals[idx]).lower()
+                return (1, str(v).strip().lower())  # textos juntos
+
 
         reverse = not getattr(self, "_auto_sort_asc", True)
         children.sort(key=_key, reverse=reverse)
